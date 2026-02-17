@@ -137,8 +137,11 @@ const messages: Record<Lang, Record<string, string>> = {
 <tr><td><b>新規作成</b></td><td>モデルを初期化します</td></tr>
 <tr><td><b>開く</b></td><td>.json ファイルを読み込みます</td></tr>
 <tr><td><b>保存</b></td><td>現在のモデルを .json ファイルとしてダウンロードします</td></tr>
-<tr><td><b>サンプル読込</b></td><td>内蔵のサンプルデータ（3階建て建物）を読み込みます</td></tr>
+<tr><td><b>サンプル読込</b></td><td>内蔵のオリジナル建物モデル JSON サンプルを読み込みます</td></tr>
 </table>
+
+<h3>JSON 入力フォーマット</h3>
+<p>入力データは、クラス管理している要素をそのまま扱えるシンプルな JSON 形式です。不要な説明ヘッダーは含みません。</p>
 
 <h3>3D ビュー操作</h3>
 <table>
@@ -305,8 +308,11 @@ const messages: Record<Lang, Record<string, string>> = {
 <tr><td><b>New</b></td><td>Initialize a new model</td></tr>
 <tr><td><b>Open</b></td><td>Load a .json file</td></tr>
 <tr><td><b>Save</b></td><td>Download the current model as a .json file</td></tr>
-<tr><td><b>Load Sample</b></td><td>Load a built-in sample (3-story building)</td></tr>
+<tr><td><b>Load Sample</b></td><td>Load a built-in JSON sample converted from the original building model</td></tr>
 </table>
+
+<h3>JSON Input Format</h3>
+<p>Input data uses a simple JSON structure that maps directly to managed class elements, without unrelated explanatory headers.</p>
 
 <h3>3D View Controls</h3>
 <table>
