@@ -26,7 +26,7 @@
 | 3D 描画 | [Three.js](https://threejs.org/) v0.182 |
 | ビルド | [Vite](https://vite.dev/) v7.3 |
 | テスト | [Vitest](https://vitest.dev/) v3.0 |
-| CI | GitHub Actions（Node.js 18 / 20） |
+| CI | GitHub Actions（Node.js 20 / 22） |
 | デプロイ | GitHub Pages（静的ホスティング） |
 
 ## セットアップ
@@ -155,7 +155,7 @@ STOP                           # ファイル終了
 
 ### 前提条件
 
-- Node.js 18 以上
+- Node.js 20 以上
 - npm
 
 ### ビルドと検証
