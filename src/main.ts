@@ -4,12 +4,27 @@ import { parseStructForm } from './io/StructFormParser';
 import { writeStructForm } from './io/StructFormWriter';
 import { ModelViewer } from './viewer/ModelViewer';
 import { DataGrid, ColumnDef } from './ui/DataGrid';
+import { Node } from './models/Node';
+import { Member } from './models/Member';
+import { Section } from './models/Section';
+import { Material } from './models/Material';
+import { BoundaryCondition } from './models/BoundaryCondition';
+import { Spring } from './models/Spring';
+import { Wall } from './models/Wall';
+import { NodeLoad } from './models/NodeLoad';
+import { CMQLoad } from './models/CMQLoad';
+import { MemberLoad } from './models/MemberLoad';
+
+// ===== 定数 =====
+const MERGE_NODE_THRESHOLD = 2.0;
+const MIN_DATA_PANEL_WIDTH = 200;
 
 // ===== グローバルドキュメント =====
 const doc = new FrameDocument();
 
 let viewer: ModelViewer;
-let currentGrid: DataGrid<Record<string, unknown>> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let currentGrid: DataGrid<any> | null = null;
 let activeTab = 'nodes';
 
 // ===== 初期化 =====
@@ -43,7 +58,7 @@ function setupMenu(): void {
   // 編集メニュー
   on('menu-sort', () => { doc.sort(); viewer.updateModel(); refreshGrid(); updateStatus('ソート完了'); });
   on('menu-renumber', () => { doc.assignNumbers(); viewer.updateModel(); refreshGrid(); updateStatus('番号再割当完了'); });
-  on('menu-merge', () => { doc.mergeOverlappingNodes(2.0); viewer.updateModel(); refreshGrid(); updateStatus('重複ノード統合完了'); });
+  on('menu-merge', () => { doc.mergeOverlappingNodes(MERGE_NODE_THRESHOLD); viewer.updateModel(); refreshGrid(); updateStatus('重複ノード統合完了'); });
 
   // 荷重定義
   on('menu-add-loadcase', () => {
@@ -67,6 +82,22 @@ function on(id: string, handler: () => void): void {
 }
 
 // ===== ファイル操作 =====
+
+/** デコード結果 */
+interface DecodeResult {
+  text: string;
+  encoding: string;
+}
+
+/** ArrayBuffer を Shift_JIS → UTF-8 でデコード（失敗時はUTF-8フォールバック） */
+function decodeTextBuffer(buffer: ArrayBuffer): DecodeResult {
+  try {
+    return { text: new TextDecoder('shift_jis').decode(buffer), encoding: 'Shift_JIS' };
+  } catch {
+    return { text: new TextDecoder().decode(buffer), encoding: 'UTF-8' };
+  }
+}
+
 function openFile(): void {
   const input = document.createElement('input');
   input.type = 'file';
@@ -74,23 +105,31 @@ function openFile(): void {
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (!file) return;
+    // パース失敗時のロールバック用にバックアップを保持
+    const backup = writeStructForm(doc);
     try {
-      // Shift_JIS 対応
-      let text: string;
-      try {
-        const buffer = await file.arrayBuffer();
-        const decoder = new TextDecoder('shift_jis');
-        text = decoder.decode(buffer);
-      } catch {
-        text = await file.text();
-      }
+      const buffer = await file.arrayBuffer();
+      const { text, encoding } = decodeTextBuffer(buffer);
       parseStructForm(text, doc);
       viewer.updateModel();
       refreshGrid();
       updateLoadCaseSelector();
-      updateStatus(`読込完了: ${file.name} (節点:${doc.nodes.length} 部材:${doc.members.length})`);
+      let status = `読込完了: ${file.name} (節点:${doc.nodes.length} 部材:${doc.members.length})`;
+      if (encoding !== 'Shift_JIS') {
+        status += ` [警告: ${encoding}でデコード]`;
+      }
+      updateStatus(status);
     } catch (e) {
-      updateStatus(`読込エラー: ${e}`);
+      // パース失敗時はバックアップからドキュメントを復元
+      try {
+        parseStructForm(backup, doc);
+      } catch {
+        doc.init();
+      }
+      viewer.updateModel();
+      refreshGrid();
+      updateLoadCaseSelector();
+      updateStatus(`読込エラー: ${e instanceof Error ? e.message : String(e)}`);
       console.error(e);
     }
   });
@@ -110,23 +149,30 @@ function saveFile(): void {
 }
 
 async function loadSample(): Promise<void> {
+  const backup = writeStructForm(doc);
   try {
     const resp = await fetch('./samples/StructForm_SampleData1_Ver8.dat');
     const buffer = await resp.arrayBuffer();
-    let text: string;
-    try {
-      const decoder = new TextDecoder('shift_jis');
-      text = decoder.decode(buffer);
-    } catch {
-      text = new TextDecoder().decode(buffer);
-    }
+    const { text, encoding } = decodeTextBuffer(buffer);
     parseStructForm(text, doc);
     viewer.updateModel();
     refreshGrid();
     updateLoadCaseSelector();
-    updateStatus(`サンプル読込完了 (節点:${doc.nodes.length} 部材:${doc.members.length})`);
+    let status = `サンプル読込完了 (節点:${doc.nodes.length} 部材:${doc.members.length})`;
+    if (encoding !== 'Shift_JIS') {
+      status += ` [警告: ${encoding}でデコード]`;
+    }
+    updateStatus(status);
   } catch (e) {
-    updateStatus(`サンプル読込エラー: ${e}`);
+    try {
+      parseStructForm(backup, doc);
+    } catch {
+      doc.init();
+    }
+    viewer.updateModel();
+    refreshGrid();
+    updateLoadCaseSelector();
+    updateStatus(`サンプル読込エラー: ${e instanceof Error ? e.message : String(e)}`);
     console.error(e);
   }
 }
@@ -149,7 +195,7 @@ function setupResizer(): void {
     startW = dataPanel.offsetWidth;
     const onMove = (ev: MouseEvent) => {
       const delta = startX - ev.clientX;
-      dataPanel.style.width = Math.max(200, startW + delta) + 'px';
+      dataPanel.style.width = Math.max(MIN_DATA_PANEL_WIDTH, startW + delta) + 'px';
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
@@ -199,6 +245,9 @@ function showTab(tabId: string): void {
 
 function refreshGrid(): void {
   const container = document.getElementById('grid-container')!;
+  if (currentGrid) {
+    currentGrid.destroy();
+  }
   container.innerHTML = '';
   currentGrid = null;
 
@@ -208,54 +257,54 @@ function refreshGrid(): void {
 
   switch (activeTab) {
     case 'nodes':
-      currentGrid = new DataGrid(container, nodeColumns, doc.nodes as unknown as Record<string, unknown>[]);
+      currentGrid = new DataGrid<Node>(container, nodeColumns, doc.nodes);
       break;
     case 'boundaries':
-      currentGrid = new DataGrid(container, boundaryColumns, doc.boundaries as unknown as Record<string, unknown>[]);
+      currentGrid = new DataGrid<BoundaryCondition>(container, boundaryColumns, doc.boundaries);
       break;
     case 'materials':
-      currentGrid = new DataGrid(container, materialColumns, doc.materials as unknown as Record<string, unknown>[]);
+      currentGrid = new DataGrid<Material>(container, materialColumns, doc.materials);
       break;
     case 'sections':
-      currentGrid = new DataGrid(container, sectionColumns, doc.sections as unknown as Record<string, unknown>[]);
+      currentGrid = new DataGrid<Section>(container, sectionColumns, doc.sections);
       break;
     case 'springs':
-      currentGrid = new DataGrid(container, springColumns, doc.springs as unknown as Record<string, unknown>[]);
+      currentGrid = new DataGrid<Spring>(container, springColumns, doc.springs);
       break;
     case 'members':
-      currentGrid = new DataGrid(container, memberColumns, doc.members as unknown as Record<string, unknown>[]);
+      currentGrid = new DataGrid<Member>(container, memberColumns, doc.members);
       break;
     case 'walls':
-      currentGrid = new DataGrid(container, wallColumns, doc.walls as unknown as Record<string, unknown>[]);
+      currentGrid = new DataGrid<Wall>(container, wallColumns, doc.walls);
       break;
     case 'nodeloads': {
       const loads = doc.nodes
         .filter(n => n.loads.length > doc.loadCaseIndex)
-        .map(n => ({
-          nodeNumber: n.number,
-          ...n.getLoad(doc.loadCaseIndex),
-        }));
-      currentGrid = new DataGrid(container, nodeLoadColumns, loads as unknown as Record<string, unknown>[]);
+        .map(n => {
+          const load = n.getLoad(doc.loadCaseIndex);
+          return { nodeNumber: n.number, p1: load.p1, p2: load.p2, p3: load.p3, m1: load.m1, m2: load.m2, m3: load.m3 };
+        });
+      currentGrid = new DataGrid(container, nodeLoadColumns, loads);
       break;
     }
     case 'cmqloads': {
       const loads = doc.members
         .filter(m => m.cmqLoads.length > doc.loadCaseIndex)
-        .map(m => ({
-          memberNumber: m.number,
-          ...m.getCMQLoad(doc.loadCaseIndex),
-        }));
-      currentGrid = new DataGrid(container, cmqLoadColumns, loads as unknown as Record<string, unknown>[]);
+        .map(m => {
+          const load = m.getCMQLoad(doc.loadCaseIndex);
+          return { memberNumber: m.number, moy: load.moy, moz: load.moz, iMy: load.iMy, iMz: load.iMz, iQx: load.iQx, iQy: load.iQy, iQz: load.iQz, jMy: load.jMy, jMz: load.jMz, jQx: load.jQx, jQy: load.jQy, jQz: load.jQz };
+        });
+      currentGrid = new DataGrid(container, cmqLoadColumns, loads);
       break;
     }
     case 'memberloads': {
       const loads = doc.members
         .filter(m => m.memberLoads.length > doc.loadCaseIndex)
-        .map(m => ({
-          memberNumber: m.number,
-          ...m.getMemberLoad(doc.loadCaseIndex),
-        }));
-      currentGrid = new DataGrid(container, memberLoadColumns, loads as unknown as Record<string, unknown>[]);
+        .map(m => {
+          const load = m.getMemberLoad(doc.loadCaseIndex);
+          return { memberNumber: m.number, lengthMethod: load.lengthMethod, type: load.type, direction: load.direction, scale: load.scale, loadCode: load.loadCode, unitLoad: load.unitLoad, p1: load.p1, p2: load.p2, p3: load.p3 };
+        });
+      currentGrid = new DataGrid(container, memberLoadColumns, loads);
       break;
     }
   }
@@ -290,7 +339,11 @@ function updateStatus(msg: string): void {
 }
 
 // ===== 列定義 =====
-const nodeColumns: ColumnDef[] = [
+interface NodeLoadRow { nodeNumber: number; p1: number; p2: number; p3: number; m1: number; m2: number; m3: number; }
+interface CMQLoadRow { memberNumber: number; moy: number; moz: number; iMy: number; iMz: number; iQx: number; iQy: number; iQz: number; jMy: number; jMz: number; jQx: number; jQy: number; jQz: number; }
+interface MemberLoadRow { memberNumber: number; lengthMethod: number; type: number; direction: number; scale: number; loadCode: string; unitLoad: number; p1: number; p2: number; p3: number; }
+
+const nodeColumns: ColumnDef<Node>[] = [
   { key: 'number', header: '節点番号', width: '60px', type: 'int' },
   { key: 'x', header: 'X座標 cm', width: '90px', type: 'number' },
   { key: 'y', header: 'Y座標 cm', width: '90px', type: 'number' },
@@ -303,7 +356,7 @@ const nodeColumns: ColumnDef[] = [
   { key: 'area', header: '面積cm2', width: '70px', type: 'number' },
 ];
 
-const boundaryColumns: ColumnDef[] = [
+const boundaryColumns: ColumnDef<BoundaryCondition>[] = [
   { key: 'nodeNumber', header: '節点番号', width: '60px', type: 'int' },
   { key: 'deltaX', header: 'DX', width: '40px', type: 'int' },
   { key: 'deltaY', header: 'DY', width: '40px', type: 'int' },
@@ -313,7 +366,7 @@ const boundaryColumns: ColumnDef[] = [
   { key: 'thetaZ', header: 'RZ', width: '40px', type: 'int' },
 ];
 
-const materialColumns: ColumnDef[] = [
+const materialColumns: ColumnDef<Material>[] = [
   { key: 'number', header: '番号', width: '40px', type: 'int' },
   { key: 'young', header: 'ヤング係数', width: '100px', type: 'number' },
   { key: 'shear', header: 'せん断', width: '100px', type: 'number' },
@@ -323,7 +376,7 @@ const materialColumns: ColumnDef[] = [
   { key: 'name', header: '材料名', width: '100px', type: 'text' },
 ];
 
-const sectionColumns: ColumnDef[] = [
+const sectionColumns: ColumnDef<Section>[] = [
   { key: 'number', header: '番号', width: '40px', type: 'int' },
   { key: 'materialNumber', header: '材料', width: '40px', type: 'int' },
   { key: 'type', header: '種別', width: '40px', type: 'int' },
@@ -337,13 +390,13 @@ const sectionColumns: ColumnDef[] = [
   { key: 'comment', header: 'コメント', width: '100px', type: 'text' },
 ];
 
-const springColumns: ColumnDef[] = [
+const springColumns: ColumnDef<Spring>[] = [
   { key: 'number', header: '番号', width: '40px', type: 'int' },
   { key: 'method', header: '方式', width: '40px', type: 'int' },
   { key: 'kTheta', header: 'K_Theta', width: '100px', type: 'number' },
 ];
 
-const memberColumns: ColumnDef[] = [
+const memberColumns: ColumnDef<Member>[] = [
   { key: 'number', header: '部材番号', width: '50px', type: 'int' },
   { key: 'iNodeNumber', header: 'I端', width: '50px', type: 'int' },
   { key: 'jNodeNumber', header: 'J端', width: '50px', type: 'int' },
@@ -359,7 +412,7 @@ const memberColumns: ColumnDef[] = [
   { key: 'p3', header: 'P3', width: '50px', type: 'number' },
 ];
 
-const wallColumns: ColumnDef[] = [
+const wallColumns: ColumnDef<Wall>[] = [
   { key: 'number', header: '壁番号', width: '50px', type: 'int' },
   { key: 'leftBottomNode', header: '左下', width: '50px', type: 'int' },
   { key: 'rightBottomNode', header: '右下', width: '50px', type: 'int' },
@@ -373,7 +426,7 @@ const wallColumns: ColumnDef[] = [
   { key: 'p4', header: 'P4', width: '60px', type: 'number' },
 ];
 
-const nodeLoadColumns: ColumnDef[] = [
+const nodeLoadColumns: ColumnDef<NodeLoadRow>[] = [
   { key: 'nodeNumber', header: '節点番号', width: '60px', type: 'int', readOnly: true },
   { key: 'p1', header: 'P1(kN)', width: '80px', type: 'number' },
   { key: 'p2', header: 'P2(kN)', width: '80px', type: 'number' },
@@ -383,7 +436,7 @@ const nodeLoadColumns: ColumnDef[] = [
   { key: 'm3', header: 'M3', width: '80px', type: 'number' },
 ];
 
-const cmqLoadColumns: ColumnDef[] = [
+const cmqLoadColumns: ColumnDef<CMQLoadRow>[] = [
   { key: 'memberNumber', header: '部材番号', width: '60px', type: 'int', readOnly: true },
   { key: 'moy', header: 'Moy', width: '70px', type: 'number' },
   { key: 'moz', header: 'Moz', width: '70px', type: 'number' },
@@ -399,7 +452,7 @@ const cmqLoadColumns: ColumnDef[] = [
   { key: 'jQz', header: 'jQz', width: '70px', type: 'number' },
 ];
 
-const memberLoadColumns: ColumnDef[] = [
+const memberLoadColumns: ColumnDef<MemberLoadRow>[] = [
   { key: 'memberNumber', header: '部材番号', width: '60px', type: 'int', readOnly: true },
   { key: 'lengthMethod', header: '長さ方式', width: '60px', type: 'int' },
   { key: 'type', header: '種別', width: '50px', type: 'int' },

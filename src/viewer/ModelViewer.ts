@@ -2,6 +2,37 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FrameDocument } from '../models/FrameDocument';
 
+// ===== 定数 =====
+const CAMERA_FOV = 45;
+const CAMERA_NEAR = 1;
+const CAMERA_FAR = 100000;
+const CAMERA_INITIAL_POS = { x: 500, y: -1000, z: 800 };
+
+const BACKGROUND_COLOR = 0xf0f0f0;
+const GRID_SIZE = 2000;
+const GRID_DIVISIONS = 20;
+const GRID_COLOR_CENTER = 0xcccccc;
+const GRID_COLOR_LINE = 0xeeeeee;
+const AXIS_HELPER_SIZE = 200;
+
+const NODE_POINT_SIZE = 8;
+const NODE_COLOR_DEFAULT: [number, number, number] = [0, 0.3, 0.8];
+const NODE_COLOR_SELECTED: [number, number, number] = [1, 0, 0];
+const MEMBER_COLOR_DEFAULT: [number, number, number] = [0, 0.3, 0.8];
+const MEMBER_COLOR_SELECTED: [number, number, number] = [1, 0, 0];
+
+const BOUNDARY_SYMBOL_SIZE = 12;
+const BOUNDARY_SYMBOL_COLOR = 0x00aa00;
+const BOUNDARY_SYMBOL_OPACITY = 0.6;
+
+const WALL_FILL_COLOR = 0x88aacc;
+const WALL_FILL_OPACITY = 0.3;
+const WALL_EDGE_COLOR = 0x4477aa;
+
+const LABEL_FONT = '11px sans-serif';
+const LABEL_COLOR_NODE = '#0044aa';
+const LABEL_COLOR_MEMBER = '#aa4400';
+
 export class ModelViewer {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -22,6 +53,8 @@ export class ModelViewer {
 
   private labelCanvas: HTMLCanvasElement;
   private labelCtx: CanvasRenderingContext2D;
+  private onResizeBound: () => void;
+  private animationId: number = 0;
 
   constructor(container: HTMLElement, doc: FrameDocument) {
     this.container = container;
@@ -29,12 +62,12 @@ export class ModelViewer {
 
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xf0f0f0);
+    this.scene.background = new THREE.Color(BACKGROUND_COLOR);
 
     // Camera
     const aspect = container.clientWidth / container.clientHeight;
-    this.camera = new THREE.PerspectiveCamera(45, aspect, 1, 100000);
-    this.camera.position.set(500, -1000, 800);
+    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, aspect, CAMERA_NEAR, CAMERA_FAR);
+    this.camera.position.set(CAMERA_INITIAL_POS.x, CAMERA_INITIAL_POS.y, CAMERA_INITIAL_POS.z);
     this.camera.up.set(0, 0, 1);
 
     // Renderer
@@ -70,23 +103,24 @@ export class ModelViewer {
     this.scene.add(this.labelGroup);
 
     // グリッド（XY平面、Z=0）
-    const grid = new THREE.GridHelper(2000, 20, 0xcccccc, 0xeeeeee);
+    const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_COLOR_CENTER, GRID_COLOR_LINE);
     grid.rotation.x = Math.PI / 2;
     this.scene.add(grid);
 
     // 軸ヘルパー
-    const axes = new THREE.AxesHelper(200);
+    const axes = new THREE.AxesHelper(AXIS_HELPER_SIZE);
     this.scene.add(axes);
 
     // リサイズ対応
-    window.addEventListener('resize', () => this.onResize());
+    this.onResizeBound = () => this.onResize();
+    window.addEventListener('resize', this.onResizeBound);
 
     // アニメーションループ
     this.animate();
   }
 
   private animate = (): void => {
-    requestAnimationFrame(this.animate);
+    this.animationId = requestAnimationFrame(this.animate);
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
     this.drawLabels();
@@ -168,9 +202,9 @@ export class ModelViewer {
     for (const node of this.doc.nodes) {
       positions.push(node.x, node.y, node.z);
       if (node.selected) {
-        colors.push(1, 0, 0); // 赤
+        colors.push(...NODE_COLOR_SELECTED);
       } else {
-        colors.push(0, 0.3, 0.8); // 青
+        colors.push(...NODE_COLOR_DEFAULT);
       }
     }
 
@@ -181,7 +215,7 @@ export class ModelViewer {
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-      size: 8,
+      size: NODE_POINT_SIZE,
       sizeAttenuation: false,
       vertexColors: true,
     });
@@ -196,20 +230,19 @@ export class ModelViewer {
 
       const isFixed = bc.deltaX !== 0 || bc.deltaY !== 0 || bc.deltaZ !== 0;
       if (isFixed) {
-        const size = 12;
         const triGeo = new THREE.BufferGeometry();
         const v = [
-          node.x, node.y, node.z - size,
-          node.x - size * 0.7, node.y, node.z - size * 2,
-          node.x + size * 0.7, node.y, node.z - size * 2,
+          node.x, node.y, node.z - BOUNDARY_SYMBOL_SIZE,
+          node.x - BOUNDARY_SYMBOL_SIZE * 0.7, node.y, node.z - BOUNDARY_SYMBOL_SIZE * 2,
+          node.x + BOUNDARY_SYMBOL_SIZE * 0.7, node.y, node.z - BOUNDARY_SYMBOL_SIZE * 2,
         ];
         triGeo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
         triGeo.setIndex([0, 1, 2]);
         const triMat = new THREE.MeshBasicMaterial({
-          color: 0x00aa00,
+          color: BOUNDARY_SYMBOL_COLOR,
           side: THREE.DoubleSide,
           transparent: true,
-          opacity: 0.6,
+          opacity: BOUNDARY_SYMBOL_OPACITY,
         });
         const tri = new THREE.Mesh(triGeo, triMat);
         this.nodeGroup.add(tri);
@@ -229,7 +262,7 @@ export class ModelViewer {
       positions.push(iNode.x, iNode.y, iNode.z);
       positions.push(jNode.x, jNode.y, jNode.z);
 
-      const color = mem.selected ? [1, 0, 0] : [0, 0.3, 0.8];
+      const color = mem.selected ? MEMBER_COLOR_SELECTED : MEMBER_COLOR_DEFAULT;
       colors.push(...color, ...color);
     }
 
@@ -267,10 +300,10 @@ export class ModelViewer {
       geometry.setIndex([0, 1, 2, 0, 2, 3]);
 
       const material = new THREE.MeshBasicMaterial({
-        color: 0x88aacc,
+        color: WALL_FILL_COLOR,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.3,
+        opacity: WALL_FILL_OPACITY,
       });
 
       const mesh = new THREE.Mesh(geometry, material);
@@ -281,10 +314,21 @@ export class ModelViewer {
       edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute([
         ...positions, lb.x, lb.y, lb.z
       ], 3));
-      const edgeMat = new THREE.LineBasicMaterial({ color: 0x4477aa });
+      const edgeMat = new THREE.LineBasicMaterial({ color: WALL_EDGE_COLOR });
       const edgeLine = new THREE.LineLoop(edgeGeo, edgeMat);
       this.wallGroup.add(edgeLine);
     }
+  }
+
+  /** 3D座標を2Dスクリーン座標に変換（カメラ背面の場合null） */
+  private projectToScreen(worldPos: THREE.Vector3, tempVec: THREE.Vector3): { x: number; y: number } | null {
+    tempVec.copy(worldPos);
+    tempVec.project(this.camera);
+    if (tempVec.z <= 0 || tempVec.z >= 1) return null;
+    return {
+      x: (tempVec.x * 0.5 + 0.5) * this.labelCanvas.width,
+      y: (-tempVec.y * 0.5 + 0.5) * this.labelCanvas.height,
+    };
   }
 
   /** 2Dラベル描画 */
@@ -293,47 +337,50 @@ export class ModelViewer {
 
     if (!this.showNodeNumbers && !this.showMemberNumbers && !this.showWallNumbers) return;
 
-    this.labelCtx.font = '11px sans-serif';
+    this.labelCtx.font = LABEL_FONT;
     this.labelCtx.textAlign = 'center';
     this.labelCtx.textBaseline = 'bottom';
 
     const tempVec = new THREE.Vector3();
+    const worldPos = new THREE.Vector3();
 
     if (this.showNodeNumbers) {
-      this.labelCtx.fillStyle = '#0044aa';
+      this.labelCtx.fillStyle = LABEL_COLOR_NODE;
       for (const node of this.doc.nodes) {
-        tempVec.set(node.x, node.y, node.z);
-        tempVec.project(this.camera);
-        const sx = (tempVec.x * 0.5 + 0.5) * this.labelCanvas.width;
-        const sy = (-tempVec.y * 0.5 + 0.5) * this.labelCanvas.height;
-        if (tempVec.z > 0 && tempVec.z < 1) {
-          this.labelCtx.fillText(String(node.number), sx, sy - 6);
+        worldPos.set(node.x, node.y, node.z);
+        const screen = this.projectToScreen(worldPos, tempVec);
+        if (screen) {
+          this.labelCtx.fillText(String(node.number), screen.x, screen.y - 6);
         }
       }
     }
 
     if (this.showMemberNumbers) {
-      this.labelCtx.fillStyle = '#aa4400';
+      this.labelCtx.fillStyle = LABEL_COLOR_MEMBER;
       for (const mem of this.doc.members) {
         const iNode = this.doc.findNodeByNumber(mem.iNodeNumber);
         const jNode = this.doc.findNodeByNumber(mem.jNodeNumber);
         if (!iNode || !jNode) continue;
-        const cx = (iNode.x + jNode.x) / 2;
-        const cy = (iNode.y + jNode.y) / 2;
-        const cz = (iNode.z + jNode.z) / 2;
-        tempVec.set(cx, cy, cz);
-        tempVec.project(this.camera);
-        const sx = (tempVec.x * 0.5 + 0.5) * this.labelCanvas.width;
-        const sy = (-tempVec.y * 0.5 + 0.5) * this.labelCanvas.height;
-        if (tempVec.z > 0 && tempVec.z < 1) {
-          this.labelCtx.fillText(String(mem.number), sx, sy - 4);
+        worldPos.set(
+          (iNode.x + jNode.x) / 2,
+          (iNode.y + jNode.y) / 2,
+          (iNode.z + jNode.z) / 2
+        );
+        const screen = this.projectToScreen(worldPos, tempVec);
+        if (screen) {
+          this.labelCtx.fillText(String(mem.number), screen.x, screen.y - 4);
         }
       }
     }
   }
 
   dispose(): void {
-    this.renderer.dispose();
+    cancelAnimationFrame(this.animationId);
+    window.removeEventListener('resize', this.onResizeBound);
+    this.clearGroups();
     this.controls.dispose();
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+    this.labelCanvas.remove();
   }
 }

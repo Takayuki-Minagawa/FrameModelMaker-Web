@@ -6,7 +6,7 @@ function pad(n: number, width: number): string {
 
 function fmtExp(v: number): string {
   if (v === 0) return '';
-  return v.toExponential(3).toUpperCase().replace('+0', '+0').replace('-0', '-0');
+  return v.toExponential(3).toUpperCase();
 }
 
 function fmtFloat(v: number): string {
@@ -14,21 +14,14 @@ function fmtFloat(v: number): string {
   return v.toExponential(3).toUpperCase();
 }
 
-export function writeStructForm(doc: FrameDocument): string {
-  const lines: string[] = [];
+// ===== セクション別書出関数 =====
 
-  // START
+function writeHeader(lines: string[], doc: FrameDocument): void {
   lines.push('START                                                       Windows 8.00');
-
-  // TITLE
   lines.push('TITLE');
   lines.push(`"${doc.title}"`);
-
-  // CONTROL
   lines.push('CONTROL');
   lines.push('0,0,0, 5,, 5');
-
-  // M-CONTROL
   lines.push('M-CONTROL');
   lines.push(' 1 , 1 , 0 , 0 , 0 , 0 ');
   lines.push(' 0 , 0 , 0 , 5 , 80 ');
@@ -36,66 +29,69 @@ export function writeStructForm(doc: FrameDocument): string {
   lines.push(' 1 ,2.0,1.1,2.0,0.2,60');
   lines.push(' 0 , 1 , 1 , 1 ,20,15, 1 ,,');
   lines.push(' 0 , 1 , 1 , 1 ,20,15,1.0,1.0');
+}
 
-  // NODE
+function writeNodes(lines: string[], doc: FrameDocument): void {
   lines.push('NODE');
   for (const n of doc.nodes) {
     lines.push(`${pad(n.number, 5)},${n.x.toFixed(2)},${n.y.toFixed(2)},${n.z.toFixed(2)},,    0,0.0,0.0,,0.0,`);
   }
+}
 
-  // BOUNDARY
+function writeBoundaries(lines: string[], doc: FrameDocument): void {
   lines.push('BOUNDARY');
   lines.push('1,""');
   for (const b of doc.boundaries) {
     lines.push(`${pad(b.nodeNumber, 5)},${b.deltaX},${b.deltaY},${b.deltaZ},${b.thetaX},${b.thetaY},${b.thetaZ},,,,,,`);
   }
+}
 
-  // MATERIAL
+function writeMaterials(lines: string[], doc: FrameDocument): void {
   lines.push('MATERIAL');
   for (const m of doc.materials) {
     lines.push(`${pad(m.number, 2)},${m.young},${m.shear},${m.expansion},${m.poisson},${m.unitLoad},${m.name}`);
   }
-
-  // M-MATERIAL
   lines.push('M-MATERIAL');
   lines.push(' 1 ,21, 4 , 13 , 4 , 10 , 4 , 13 , 4 , 10 , 4 ,1,1,1,1,15');
+}
 
-  // SECTION
+function writeSections(lines: string[], doc: FrameDocument): void {
   lines.push('SECTION');
   for (const s of doc.sections) {
     lines.push(`${s.number},${s.materialNumber},${s.type},${s.shape},${fmtExp(s.p1_A)},${fmtExp(s.p2_Ix)},${fmtExp(s.p3_Iy)},${fmtExp(s.p4_Iz)},,,${s.ky},${s.kz},,,,,0,0,,,,,${s.comment}`);
   }
+}
 
-  // MEM1-SPRING
+function writeSprings(lines: string[], doc: FrameDocument): void {
   lines.push('MEM1-SPRING');
   for (const s of doc.springs) {
     lines.push(`${s.number},${s.method},${fmtExp(s.kTheta)}`);
   }
+}
 
-  // MEMBER
+function writeMembers(lines: string[], doc: FrameDocument): void {
   lines.push('MEMBER');
   for (const m of doc.members) {
     lines.push(`${pad(m.number, 5)},${pad(m.iNodeNumber, 5)},${pad(m.jNodeNumber, 5)},${m.ixSpring},${m.iySpring},${m.izSpring},${m.jxSpring},${m.jySpring},${m.jzSpring},${m.sectionNumber},    0,5,${m.p1},${m.p2},${m.p3},,,,,,,,,,,,,,,`);
   }
+}
 
-  // WALL
-  if (doc.walls.length > 0) {
-    lines.push('WALL');
-    for (const w of doc.walls) {
-      lines.push(`${pad(w.number, 5)},${pad(w.leftBottomNode, 5)},${pad(w.rightBottomNode, 5)},${pad(w.leftTopNode, 5)},${pad(w.rightTopNode, 5)},${pad(w.materialNumber, 2)},${w.method},${w.p1},${w.p2},${w.p3},${w.p4},`);
-    }
+function writeWalls(lines: string[], doc: FrameDocument): void {
+  if (doc.walls.length === 0) return;
+  lines.push('WALL');
+  for (const w of doc.walls) {
+    lines.push(`${pad(w.number, 5)},${pad(w.leftBottomNode, 5)},${pad(w.rightBottomNode, 5)},${pad(w.leftTopNode, 5)},${pad(w.rightTopNode, 5)},${pad(w.materialNumber, 2)},${w.method},${w.p1},${w.p2},${w.p3},${w.p4},`);
   }
+}
 
-  // AI-LOAD
+function writeLoadDefinitions(lines: string[], doc: FrameDocument): void {
   lines.push('AI-LOAD');
   lines.push('0,0,1.0,2,0.2,0.0,  0');
 
-  // LOAD-DEFINITION
   for (let i = 0; i < doc.loadCaseCount; i++) {
     lines.push('LOAD-DEFINITION');
     lines.push(`${pad(i + 1, 2)},0,0,0,"",0`);
 
-    // F-NODE
     lines.push('F-NODE');
     for (const n of doc.nodes) {
       if (n.loads.length > i) {
@@ -106,7 +102,6 @@ export function writeStructForm(doc: FrameDocument): string {
       }
     }
 
-    // F-CMQ
     lines.push('F-CMQ');
     for (const m of doc.members) {
       if (m.cmqLoads.length > i) {
@@ -117,7 +112,6 @@ export function writeStructForm(doc: FrameDocument): string {
       }
     }
 
-    // F-MEMBER
     lines.push('F-MEMBER');
     for (const m of doc.members) {
       if (m.memberLoads.length > i) {
@@ -128,8 +122,9 @@ export function writeStructForm(doc: FrameDocument): string {
       }
     }
   }
+}
 
-  // CALCULATION-CASE
+function writeCalcCase(lines: string[], doc: FrameDocument): void {
   if (doc.calcCaseMemo.length > 0) {
     if (doc.calcCaseMemo[0].trim() !== 'CALCULATION-CASE') {
       lines.push('CALCULATION-CASE');
@@ -138,8 +133,24 @@ export function writeStructForm(doc: FrameDocument): string {
       lines.push(s);
     }
   }
+}
 
-  // STOP
+// ===== エントリポイント =====
+
+export function writeStructForm(doc: FrameDocument): string {
+  const lines: string[] = [];
+
+  writeHeader(lines, doc);
+  writeNodes(lines, doc);
+  writeBoundaries(lines, doc);
+  writeMaterials(lines, doc);
+  writeSections(lines, doc);
+  writeSprings(lines, doc);
+  writeMembers(lines, doc);
+  writeWalls(lines, doc);
+  writeLoadDefinitions(lines, doc);
+  writeCalcCase(lines, doc);
+
   lines.push('STOP');
   lines.push('');
 

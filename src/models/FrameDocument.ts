@@ -26,6 +26,11 @@ export class FrameDocument {
     this.changeListeners.push(listener);
   }
 
+  removeChangeListener(listener: () => void): void {
+    const idx = this.changeListeners.indexOf(listener);
+    if (idx !== -1) this.changeListeners.splice(idx, 1);
+  }
+
   notifyChange(): void {
     for (const listener of this.changeListeners) {
       listener();
