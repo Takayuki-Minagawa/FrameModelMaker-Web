@@ -1,0 +1,1 @@
+{"version":3,"file":"BoundaryCondition.js","sourceRoot":"","sources":["../../src/models/BoundaryCondition.ts"],"names":[],"mappings":"AAAA,MAAM,OAAO,iBAAiB;IAA9B;QACE,eAAU,GAAW,CAAC,CAAC;QACvB,WAAM,GAAW,CAAC,CAAC,CAAC,uBAAuB;QAC3C,WAAM,GAAW,CAAC,CAAC;QACnB,WAAM,GAAW,CAAC,CAAC;QACnB,WAAM,GAAW,CAAC,CAAC,CAAC,SAAS;QAC7B,WAAM,GAAW,CAAC,CAAC;QACnB,WAAM,GAAW,CAAC,CAAC;IACrB,CAAC;CAAA"}
