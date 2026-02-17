@@ -454,10 +454,12 @@ function setupResizer(): void {
     const onMove = (ev: MouseEvent) => {
       const delta = startX - ev.clientX;
       dataPanel.style.width = Math.max(MIN_DATA_PANEL_WIDTH, startW + delta) + 'px';
+      viewer.resize();
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      viewer.resize();
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);

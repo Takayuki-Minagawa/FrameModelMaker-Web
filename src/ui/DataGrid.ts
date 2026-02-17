@@ -88,7 +88,6 @@ export class DataGrid<T extends Record<string, any>> {
         input.type = (col.type === 'number' || col.type === 'int') ? 'number' : 'text';
         input.value = val != null ? String(val) : '';
         if (col.readOnly) input.readOnly = true;
-        if (col.width) input.style.width = col.width;
         input.step = col.type === 'int' ? '1' : 'any';
         input.dataset.row = String(rowIdx);
         input.dataset.col = col.key;

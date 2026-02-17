@@ -142,6 +142,11 @@ export class ModelViewer {
     this.drawLabels();
   };
 
+  /** コンテナサイズ変更時にレンダラとカメラを更新 */
+  resize(): void {
+    this.onResize();
+  }
+
   private onResize(): void {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
