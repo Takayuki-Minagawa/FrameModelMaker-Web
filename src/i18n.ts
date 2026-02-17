@@ -8,8 +8,8 @@ const messages: Record<Lang, Record<string, string>> = {
     'menu.edit': '編集',
     'menu.loadcase': '荷重定義',
     'menu.new': '新規作成',
-    'menu.open': '開く (.dat)',
-    'menu.save': '保存 (.dat)',
+    'menu.open': '開く (.json)',
+    'menu.save': '保存 (.json)',
     'menu.sample': 'サンプル読込',
     'menu.showNodeNum': '節点番号 表示/非表示',
     'menu.showMemberNum': '部材番号 表示/非表示',
@@ -130,13 +130,13 @@ const messages: Record<Lang, Record<string, string>> = {
     'help.close': '閉じる',
     'help.content': `
 <h3>概要</h3>
-<p>FrameModelMaker-Web は、立体フレーム（骨組構造）の解析モデルを作成・編集・可視化する Web アプリケーションです。StructForm フォーマット（.dat）のファイルを読み書きできます。</p>
+<p>FrameModelMaker-Web は、立体フレーム（骨組構造）の解析モデルを作成・編集・可視化する Web アプリケーションです。シンプルな JSON 形式のファイルを読み書きできます。</p>
 
 <h3>ファイル操作</h3>
 <table>
 <tr><td><b>新規作成</b></td><td>モデルを初期化します</td></tr>
-<tr><td><b>開く</b></td><td>.dat ファイルを読み込みます（Shift_JIS / UTF-8 対応）</td></tr>
-<tr><td><b>保存</b></td><td>現在のモデルを .dat ファイルとしてダウンロードします</td></tr>
+<tr><td><b>開く</b></td><td>.json ファイルを読み込みます</td></tr>
+<tr><td><b>保存</b></td><td>現在のモデルを .json ファイルとしてダウンロードします</td></tr>
 <tr><td><b>サンプル読込</b></td><td>内蔵のサンプルデータ（3階建て建物）を読み込みます</td></tr>
 </table>
 
@@ -176,8 +176,8 @@ const messages: Record<Lang, Record<string, string>> = {
     'menu.edit': 'Edit',
     'menu.loadcase': 'Load Case',
     'menu.new': 'New',
-    'menu.open': 'Open (.dat)',
-    'menu.save': 'Save (.dat)',
+    'menu.open': 'Open (.json)',
+    'menu.save': 'Save (.json)',
     'menu.sample': 'Load Sample',
     'menu.showNodeNum': 'Node Numbers Show/Hide',
     'menu.showMemberNum': 'Member Numbers Show/Hide',
@@ -298,13 +298,13 @@ const messages: Record<Lang, Record<string, string>> = {
     'help.close': 'Close',
     'help.content': `
 <h3>Overview</h3>
-<p>FrameModelMaker-Web is a web application for creating, editing, and visualizing 3D frame (skeletal structure) analysis models. It reads and writes StructForm format (.dat) files.</p>
+<p>FrameModelMaker-Web is a web application for creating, editing, and visualizing 3D frame (skeletal structure) analysis models. It reads and writes simple JSON model files.</p>
 
 <h3>File Operations</h3>
 <table>
 <tr><td><b>New</b></td><td>Initialize a new model</td></tr>
-<tr><td><b>Open</b></td><td>Load a .dat file (Shift_JIS / UTF-8 supported)</td></tr>
-<tr><td><b>Save</b></td><td>Download the current model as a .dat file</td></tr>
+<tr><td><b>Open</b></td><td>Load a .json file</td></tr>
+<tr><td><b>Save</b></td><td>Download the current model as a .json file</td></tr>
 <tr><td><b>Load Sample</b></td><td>Load a built-in sample (3-story building)</td></tr>
 </table>
 

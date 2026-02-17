@@ -1,0 +1,114 @@
+{
+  "nodes": [
+    { "key": "number", "width": "60px", "type": "int" },
+    { "key": "x", "width": "90px", "type": "number" },
+    { "key": "y", "width": "90px", "type": "number" },
+    { "key": "z", "width": "90px", "type": "number" },
+    { "key": "temperature", "width": "70px", "type": "number" },
+    { "key": "intensityGroup", "width": "50px", "type": "int" },
+    { "key": "longWeight", "width": "80px", "type": "number" },
+    { "key": "forceWeight", "width": "80px", "type": "number" },
+    { "key": "addForceWeight", "width": "80px", "type": "number" },
+    { "key": "area", "width": "70px", "type": "number" }
+  ],
+  "boundaries": [
+    { "key": "nodeNumber", "width": "60px", "type": "int" },
+    { "key": "deltaX", "width": "40px", "type": "int" },
+    { "key": "deltaY", "width": "40px", "type": "int" },
+    { "key": "deltaZ", "width": "40px", "type": "int" },
+    { "key": "thetaX", "width": "40px", "type": "int" },
+    { "key": "thetaY", "width": "40px", "type": "int" },
+    { "key": "thetaZ", "width": "40px", "type": "int" }
+  ],
+  "materials": [
+    { "key": "number", "width": "40px", "type": "int" },
+    { "key": "young", "width": "100px", "type": "number" },
+    { "key": "shear", "width": "100px", "type": "number" },
+    { "key": "expansion", "width": "80px", "type": "number" },
+    { "key": "poisson", "width": "80px", "type": "number" },
+    { "key": "unitLoad", "width": "80px", "type": "number" },
+    { "key": "name", "width": "100px", "type": "text" }
+  ],
+  "sections": [
+    { "key": "number", "width": "40px", "type": "int" },
+    { "key": "materialNumber", "width": "40px", "type": "int" },
+    { "key": "type", "width": "40px", "type": "int" },
+    { "key": "shape", "width": "40px", "type": "int" },
+    { "key": "p1_A", "width": "90px", "type": "number" },
+    { "key": "p2_Ix", "width": "90px", "type": "number" },
+    { "key": "p3_Iy", "width": "90px", "type": "number" },
+    { "key": "p4_Iz", "width": "90px", "type": "number" },
+    { "key": "ky", "width": "50px", "type": "number" },
+    { "key": "kz", "width": "50px", "type": "number" },
+    { "key": "comment", "width": "100px", "type": "text" }
+  ],
+  "springs": [
+    { "key": "number", "width": "40px", "type": "int" },
+    { "key": "method", "width": "40px", "type": "int" },
+    { "key": "kTheta", "width": "100px", "type": "number" }
+  ],
+  "members": [
+    { "key": "number", "width": "50px", "type": "int" },
+    { "key": "iNodeNumber", "width": "50px", "type": "int" },
+    { "key": "jNodeNumber", "width": "50px", "type": "int" },
+    { "key": "ixSpring", "width": "40px", "type": "int" },
+    { "key": "iySpring", "width": "40px", "type": "int" },
+    { "key": "izSpring", "width": "40px", "type": "int" },
+    { "key": "jxSpring", "width": "40px", "type": "int" },
+    { "key": "jySpring", "width": "40px", "type": "int" },
+    { "key": "jzSpring", "width": "40px", "type": "int" },
+    { "key": "sectionNumber", "width": "50px", "type": "int" },
+    { "key": "p1", "width": "50px", "type": "number" },
+    { "key": "p2", "width": "50px", "type": "number" },
+    { "key": "p3", "width": "50px", "type": "number" }
+  ],
+  "walls": [
+    { "key": "number", "width": "50px", "type": "int" },
+    { "key": "leftBottomNode", "width": "50px", "type": "int" },
+    { "key": "rightBottomNode", "width": "50px", "type": "int" },
+    { "key": "leftTopNode", "width": "50px", "type": "int" },
+    { "key": "rightTopNode", "width": "50px", "type": "int" },
+    { "key": "materialNumber", "width": "40px", "type": "int" },
+    { "key": "method", "width": "40px", "type": "int" },
+    { "key": "p1", "width": "60px", "type": "number" },
+    { "key": "p2", "width": "60px", "type": "number" },
+    { "key": "p3", "width": "60px", "type": "number" },
+    { "key": "p4", "width": "60px", "type": "number" }
+  ],
+  "nodeloads": [
+    { "key": "nodeNumber", "width": "60px", "type": "int", "readOnly": true },
+    { "key": "p1", "width": "80px", "type": "number" },
+    { "key": "p2", "width": "80px", "type": "number" },
+    { "key": "p3", "width": "80px", "type": "number" },
+    { "key": "m1", "width": "80px", "type": "number" },
+    { "key": "m2", "width": "80px", "type": "number" },
+    { "key": "m3", "width": "80px", "type": "number" }
+  ],
+  "cmqloads": [
+    { "key": "memberNumber", "width": "60px", "type": "int", "readOnly": true },
+    { "key": "moy", "width": "70px", "type": "number" },
+    { "key": "moz", "width": "70px", "type": "number" },
+    { "key": "iMy", "width": "70px", "type": "number" },
+    { "key": "iMz", "width": "70px", "type": "number" },
+    { "key": "iQx", "width": "70px", "type": "number" },
+    { "key": "iQy", "width": "70px", "type": "number" },
+    { "key": "iQz", "width": "70px", "type": "number" },
+    { "key": "jMy", "width": "70px", "type": "number" },
+    { "key": "jMz", "width": "70px", "type": "number" },
+    { "key": "jQx", "width": "70px", "type": "number" },
+    { "key": "jQy", "width": "70px", "type": "number" },
+    { "key": "jQz", "width": "70px", "type": "number" }
+  ],
+  "memberloads": [
+    { "key": "memberNumber", "width": "60px", "type": "int", "readOnly": true },
+    { "key": "lengthMethod", "width": "60px", "type": "int" },
+    { "key": "type", "width": "50px", "type": "int" },
+    { "key": "direction", "width": "50px", "type": "int" },
+    { "key": "scale", "width": "60px", "type": "number" },
+    { "key": "loadCode", "width": "60px", "type": "text" },
+    { "key": "unitLoad", "width": "70px", "type": "number" },
+    { "key": "p1", "width": "80px", "type": "number" },
+    { "key": "p2", "width": "80px", "type": "number" },
+    { "key": "p3", "width": "80px", "type": "number" }
+  ]
+}

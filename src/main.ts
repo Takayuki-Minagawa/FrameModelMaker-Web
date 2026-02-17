@@ -1,9 +1,9 @@
 import './styles/main.css';
 import { FrameDocument } from './models/FrameDocument';
-import { parseStructForm } from './io/StructFormParser';
-import { writeStructForm } from './io/StructFormWriter';
+import { parseFrameJson, writeFrameJson } from './io/FrameJson';
 import { ModelViewer } from './viewer/ModelViewer';
 import { DataGrid, ColumnDef } from './ui/DataGrid';
+import gridColumns from './data/gridColumns.json';
 import { Node } from './models/Node';
 import { Member } from './models/Member';
 import { Section } from './models/Section';
@@ -11,14 +11,20 @@ import { Material } from './models/Material';
 import { BoundaryCondition } from './models/BoundaryCondition';
 import { Spring } from './models/Spring';
 import { Wall } from './models/Wall';
-import { NodeLoad } from './models/NodeLoad';
-import { CMQLoad } from './models/CMQLoad';
-import { MemberLoad } from './models/MemberLoad';
 import { t, getLang, setLang, Lang } from './i18n';
 
 // ===== 定数 =====
 const MERGE_NODE_THRESHOLD = 2.0;
 const MIN_DATA_PANEL_WIDTH = 200;
+type ColumnType = 'number' | 'text' | 'int';
+interface GridColumnConfig {
+  key: string;
+  header?: string;
+  width?: string;
+  type?: ColumnType;
+  readOnly?: boolean;
+}
+const GRID_COLUMNS = gridColumns as Record<string, GridColumnConfig[]>;
 
 // ===== グローバルドキュメント =====
 const doc = new FrameDocument();
@@ -343,44 +349,24 @@ function deleteRow(): void {
 
 // ===== ファイル操作 =====
 
-/** デコード結果 */
-interface DecodeResult {
-  text: string;
-  encoding: string;
-}
-
-/** ArrayBuffer を Shift_JIS → UTF-8 でデコード（失敗時はUTF-8フォールバック） */
-function decodeTextBuffer(buffer: ArrayBuffer): DecodeResult {
-  try {
-    return { text: new TextDecoder('shift_jis').decode(buffer), encoding: 'Shift_JIS' };
-  } catch {
-    return { text: new TextDecoder().decode(buffer), encoding: 'UTF-8' };
-  }
-}
-
 function openFile(): void {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.dat,.txt';
+  input.accept = '.json';
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (!file) return;
-    const backup = writeStructForm(doc);
+    const backup = writeFrameJson(doc);
     try {
-      const buffer = await file.arrayBuffer();
-      const { text, encoding } = decodeTextBuffer(buffer);
-      parseStructForm(text, doc);
+      const text = await file.text();
+      parseFrameJson(text, doc);
       viewer.updateModel();
       refreshGrid();
       updateLoadCaseSelector();
-      let status = t('status.fileLoaded', file.name, doc.nodes.length, doc.members.length);
-      if (encoding !== 'Shift_JIS') {
-        status += t('status.encodingWarning', encoding);
-      }
-      updateStatus(status);
+      updateStatus(t('status.fileLoaded', file.name, doc.nodes.length, doc.members.length));
     } catch (e) {
       try {
-        parseStructForm(backup, doc);
+        parseFrameJson(backup, doc);
       } catch {
         doc.init();
       }
@@ -395,35 +381,30 @@ function openFile(): void {
 }
 
 function saveFile(): void {
-  const content = writeStructForm(doc);
-  const blob = new Blob([content], { type: 'text/plain' });
+  const content = writeFrameJson(doc);
+  const blob = new Blob([content], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = (doc.title || 'model') + '.dat';
+  a.download = (doc.title || 'model') + '.json';
   a.click();
   URL.revokeObjectURL(url);
   updateStatus(t('status.fileSaved'));
 }
 
 async function loadSample(): Promise<void> {
-  const backup = writeStructForm(doc);
+  const backup = writeFrameJson(doc);
   try {
-    const resp = await fetch('./samples/StructForm_SampleData1_Ver8.dat');
-    const buffer = await resp.arrayBuffer();
-    const { text, encoding } = decodeTextBuffer(buffer);
-    parseStructForm(text, doc);
+    const resp = await fetch('./samples/FrameModel_Sample.json');
+    const text = await resp.text();
+    parseFrameJson(text, doc);
     viewer.updateModel();
     refreshGrid();
     updateLoadCaseSelector();
-    let status = t('status.sampleLoaded', doc.nodes.length, doc.members.length);
-    if (encoding !== 'Shift_JIS') {
-      status += t('status.encodingWarning', encoding);
-    }
-    updateStatus(status);
+    updateStatus(t('status.sampleLoaded', doc.nodes.length, doc.members.length));
   } catch (e) {
     try {
-      parseStructForm(backup, doc);
+      parseFrameJson(backup, doc);
     } catch {
       doc.init();
     }
@@ -585,151 +566,59 @@ function updateStatus(msg: string): void {
   if (el) el.textContent = msg;
 }
 
-// ===== 列定義（関数化: 言語切替時に最新の翻訳を取得） =====
+// ===== 列定義 =====
 interface NodeLoadRow { nodeNumber: number; p1: number; p2: number; p3: number; m1: number; m2: number; m3: number; }
 interface CMQLoadRow { memberNumber: number; moy: number; moz: number; iMy: number; iMz: number; iQx: number; iQy: number; iQz: number; jMy: number; jMz: number; jQx: number; jQy: number; jQz: number; }
 interface MemberLoadRow { memberNumber: number; lengthMethod: number; type: number; direction: number; scale: number; loadCode: string; unitLoad: number; p1: number; p2: number; p3: number; }
 
+function getColumnsFromConfig<T extends object>(tabId: string): ColumnDef<T>[] {
+  return (GRID_COLUMNS[tabId] ?? []).map(col => ({
+    key: col.key as keyof T & string,
+    header: col.header,
+    width: col.width,
+    type: col.type,
+    readOnly: col.readOnly,
+  }));
+}
+
 function getNodeColumns(): ColumnDef<Node>[] {
-  return [
-    { key: 'number', header: t('col.nodeNumber'), width: '60px', type: 'int' },
-    { key: 'x', header: t('col.xCoord'), width: '90px', type: 'number' },
-    { key: 'y', header: t('col.yCoord'), width: '90px', type: 'number' },
-    { key: 'z', header: t('col.zCoord'), width: '90px', type: 'number' },
-    { key: 'temperature', header: t('col.temperature'), width: '70px', type: 'number' },
-    { key: 'intensityGroup', header: t('col.intensityGroup'), width: '50px', type: 'int' },
-    { key: 'longWeight', header: t('col.longWeight'), width: '80px', type: 'number' },
-    { key: 'forceWeight', header: t('col.forceWeight'), width: '80px', type: 'number' },
-    { key: 'addForceWeight', header: t('col.addForceWeight'), width: '80px', type: 'number' },
-    { key: 'area', header: t('col.area'), width: '70px', type: 'number' },
-  ];
+  return getColumnsFromConfig<Node>('nodes');
 }
 
 function getBoundaryColumns(): ColumnDef<BoundaryCondition>[] {
-  return [
-    { key: 'nodeNumber', header: t('col.nodeNumber'), width: '60px', type: 'int' },
-    { key: 'deltaX', header: t('col.deltaX'), width: '40px', type: 'int' },
-    { key: 'deltaY', header: t('col.deltaY'), width: '40px', type: 'int' },
-    { key: 'deltaZ', header: t('col.deltaZ'), width: '40px', type: 'int' },
-    { key: 'thetaX', header: t('col.thetaX'), width: '40px', type: 'int' },
-    { key: 'thetaY', header: t('col.thetaY'), width: '40px', type: 'int' },
-    { key: 'thetaZ', header: t('col.thetaZ'), width: '40px', type: 'int' },
-  ];
+  return getColumnsFromConfig<BoundaryCondition>('boundaries');
 }
 
 function getMaterialColumns(): ColumnDef<Material>[] {
-  return [
-    { key: 'number', header: t('col.number'), width: '40px', type: 'int' },
-    { key: 'young', header: t('col.young'), width: '100px', type: 'number' },
-    { key: 'shear', header: t('col.shear'), width: '100px', type: 'number' },
-    { key: 'expansion', header: t('col.expansion'), width: '80px', type: 'number' },
-    { key: 'poisson', header: t('col.poisson'), width: '80px', type: 'number' },
-    { key: 'unitLoad', header: t('col.unitLoad'), width: '80px', type: 'number' },
-    { key: 'name', header: t('col.materialName'), width: '100px', type: 'text' },
-  ];
+  return getColumnsFromConfig<Material>('materials');
 }
 
 function getSectionColumns(): ColumnDef<Section>[] {
-  return [
-    { key: 'number', header: t('col.number'), width: '40px', type: 'int' },
-    { key: 'materialNumber', header: t('col.material'), width: '40px', type: 'int' },
-    { key: 'type', header: t('col.type'), width: '40px', type: 'int' },
-    { key: 'shape', header: t('col.shape'), width: '40px', type: 'int' },
-    { key: 'p1_A', header: 'A', width: '90px', type: 'number' },
-    { key: 'p2_Ix', header: 'Ix', width: '90px', type: 'number' },
-    { key: 'p3_Iy', header: 'Iy', width: '90px', type: 'number' },
-    { key: 'p4_Iz', header: 'Iz', width: '90px', type: 'number' },
-    { key: 'ky', header: 'Ky', width: '50px', type: 'number' },
-    { key: 'kz', header: 'Kz', width: '50px', type: 'number' },
-    { key: 'comment', header: t('col.comment'), width: '100px', type: 'text' },
-  ];
+  return getColumnsFromConfig<Section>('sections');
 }
 
 function getSpringColumns(): ColumnDef<Spring>[] {
-  return [
-    { key: 'number', header: t('col.number'), width: '40px', type: 'int' },
-    { key: 'method', header: t('col.method'), width: '40px', type: 'int' },
-    { key: 'kTheta', header: 'K_Theta', width: '100px', type: 'number' },
-  ];
+  return getColumnsFromConfig<Spring>('springs');
 }
 
 function getMemberColumns(): ColumnDef<Member>[] {
-  return [
-    { key: 'number', header: t('col.memberNumber'), width: '50px', type: 'int' },
-    { key: 'iNodeNumber', header: t('col.iNode'), width: '50px', type: 'int' },
-    { key: 'jNodeNumber', header: t('col.jNode'), width: '50px', type: 'int' },
-    { key: 'ixSpring', header: 'Ix', width: '40px', type: 'int' },
-    { key: 'iySpring', header: 'Iy', width: '40px', type: 'int' },
-    { key: 'izSpring', header: 'Iz', width: '40px', type: 'int' },
-    { key: 'jxSpring', header: 'Jx', width: '40px', type: 'int' },
-    { key: 'jySpring', header: 'Jy', width: '40px', type: 'int' },
-    { key: 'jzSpring', header: 'Jz', width: '40px', type: 'int' },
-    { key: 'sectionNumber', header: t('col.section'), width: '50px', type: 'int' },
-    { key: 'p1', header: 'P1', width: '50px', type: 'number' },
-    { key: 'p2', header: 'P2', width: '50px', type: 'number' },
-    { key: 'p3', header: 'P3', width: '50px', type: 'number' },
-  ];
+  return getColumnsFromConfig<Member>('members');
 }
 
 function getWallColumns(): ColumnDef<Wall>[] {
-  return [
-    { key: 'number', header: t('col.wallNumber'), width: '50px', type: 'int' },
-    { key: 'leftBottomNode', header: t('col.leftBottom'), width: '50px', type: 'int' },
-    { key: 'rightBottomNode', header: t('col.rightBottom'), width: '50px', type: 'int' },
-    { key: 'leftTopNode', header: t('col.leftTop'), width: '50px', type: 'int' },
-    { key: 'rightTopNode', header: t('col.rightTop'), width: '50px', type: 'int' },
-    { key: 'materialNumber', header: t('col.material'), width: '40px', type: 'int' },
-    { key: 'method', header: t('col.method'), width: '40px', type: 'int' },
-    { key: 'p1', header: 'P1', width: '60px', type: 'number' },
-    { key: 'p2', header: 'P2', width: '60px', type: 'number' },
-    { key: 'p3', header: 'P3', width: '60px', type: 'number' },
-    { key: 'p4', header: 'P4', width: '60px', type: 'number' },
-  ];
+  return getColumnsFromConfig<Wall>('walls');
 }
 
 function getNodeLoadColumns(): ColumnDef<NodeLoadRow>[] {
-  return [
-    { key: 'nodeNumber', header: t('col.nodeNumber'), width: '60px', type: 'int', readOnly: true },
-    { key: 'p1', header: t('col.p1kN'), width: '80px', type: 'number' },
-    { key: 'p2', header: t('col.p2kN'), width: '80px', type: 'number' },
-    { key: 'p3', header: t('col.p3kN'), width: '80px', type: 'number' },
-    { key: 'm1', header: 'M1', width: '80px', type: 'number' },
-    { key: 'm2', header: 'M2', width: '80px', type: 'number' },
-    { key: 'm3', header: 'M3', width: '80px', type: 'number' },
-  ];
+  return getColumnsFromConfig<NodeLoadRow>('nodeloads');
 }
 
 function getCMQLoadColumns(): ColumnDef<CMQLoadRow>[] {
-  return [
-    { key: 'memberNumber', header: t('col.memberNumber'), width: '60px', type: 'int', readOnly: true },
-    { key: 'moy', header: 'Moy', width: '70px', type: 'number' },
-    { key: 'moz', header: 'Moz', width: '70px', type: 'number' },
-    { key: 'iMy', header: 'iMy', width: '70px', type: 'number' },
-    { key: 'iMz', header: 'iMz', width: '70px', type: 'number' },
-    { key: 'iQx', header: 'iQx', width: '70px', type: 'number' },
-    { key: 'iQy', header: 'iQy', width: '70px', type: 'number' },
-    { key: 'iQz', header: 'iQz', width: '70px', type: 'number' },
-    { key: 'jMy', header: 'jMy', width: '70px', type: 'number' },
-    { key: 'jMz', header: 'jMz', width: '70px', type: 'number' },
-    { key: 'jQx', header: 'jQx', width: '70px', type: 'number' },
-    { key: 'jQy', header: 'jQy', width: '70px', type: 'number' },
-    { key: 'jQz', header: 'jQz', width: '70px', type: 'number' },
-  ];
+  return getColumnsFromConfig<CMQLoadRow>('cmqloads');
 }
 
 function getMemberLoadColumns(): ColumnDef<MemberLoadRow>[] {
-  return [
-    { key: 'memberNumber', header: t('col.memberNumber'), width: '60px', type: 'int', readOnly: true },
-    { key: 'lengthMethod', header: t('col.lengthMethod'), width: '60px', type: 'int' },
-    { key: 'type', header: t('col.type'), width: '50px', type: 'int' },
-    { key: 'direction', header: t('col.direction'), width: '50px', type: 'int' },
-    { key: 'scale', header: t('col.scale'), width: '60px', type: 'number' },
-    { key: 'loadCode', header: t('col.code'), width: '60px', type: 'text' },
-    { key: 'unitLoad', header: t('col.unitLoad'), width: '70px', type: 'number' },
-    { key: 'p1', header: 'P1', width: '80px', type: 'number' },
-    { key: 'p2', header: 'P2', width: '80px', type: 'number' },
-    { key: 'p3', header: 'P3', width: '80px', type: 'number' },
-  ];
+  return getColumnsFromConfig<MemberLoadRow>('memberloads');
 }
 
 // ===== 起動 =====

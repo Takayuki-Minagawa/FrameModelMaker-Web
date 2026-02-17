@@ -11,7 +11,7 @@
 
 - **3D モデルビューア** — Three.js による立体フレームモデルのリアルタイム 3D 表示。回転・パン・ズームに対応
 - **データ編集** — 節点・部材・断面・材料・境界条件・バネ・壁・荷重をタブ切替式のグリッドで直接編集
-- **ファイル入出力** — StructForm フォーマット（`.dat`）の読み込みと書き出し。Shift_JIS / UTF-8 に対応
+- **ファイル入出力** — シンプルな JSON 形式で保存・読込
 - **モデル操作** — 節点ソート、番号再割当、重複ノード統合
 - **荷重定義管理** — 複数の荷重ケースの追加・削除・切替
 - **多言語対応（i18n）** — 日本語 / 英語の UI 切替。メニュー・タブ・グリッド列ヘッダー・ステータスメッセージ・ヘルプを含む全 UI テキストに対応
@@ -52,8 +52,8 @@ npm run preview
 | 操作 | 説明 |
 |------|------|
 | 新規作成 | 空のモデルを作成 |
-| 開く | `.dat` ファイルを読み込み |
-| 保存 | 現在のモデルを `.dat` ファイルとしてダウンロード |
+| 開く | `.json` ファイルを読み込み |
+| 保存 | 現在のモデルを `.json` ファイルとしてダウンロード |
 | サンプル読込 | 内蔵のサンプルデータ（3 階建て建物モデル）を読み込み |
 
 ### 3D ビュー操作
@@ -100,56 +100,43 @@ src/
 ├── models/              # データモデル（Node, Member, Section 等）
 │   └── FrameDocument.ts # ドキュメント統括クラス
 ├── io/                  # ファイル入出力
-│   ├── StructFormParser.ts  # .dat 読み込み
-│   └── StructFormWriter.ts  # .dat 書き出し
+│   └── FrameJson.ts     # .json 読み書き
 ├── viewer/
 │   └── ModelViewer.ts   # Three.js 3D ビューア
 ├── ui/
 │   └── DataGrid.ts      # 汎用データグリッドコンポーネント
+├── data/
+│   └── gridColumns.json # 列定義（keyベース）
 └── styles/
     └── main.css         # CSS 変数によるテーマ定義
 
 tests/                   # Vitest テストスイート
 ├── models/              # モデル単体テスト
-└── io/                  # パーサー・ラウンドトリップテスト
+└── io/                  # JSON 入出力テスト
 
 public/
 └── favicon.svg          # アプリアイコン（SVG）
 ```
 
-## StructForm ファイルフォーマット
+## JSON 入力フォーマット
 
-StructForm フォーマット（`.dat`）は、フレーム構造解析で使用されるテキスト形式のデータファイルです。
-エンコーディングは Shift_JIS、区切り文字はカンマ（`,`）を使用します。
+保存・編集の基本フォーマットは、クラスプロパティをそのまま並べたシンプルな JSON です（説明ヘッダーなし）。
 
-<details>
-<summary>ファイル構造の概要</summary>
-
+```json
+{
+  "title": "Sample",
+  "loadCaseCount": 1,
+  "loadCaseIndex": 0,
+  "nodes": [{ "number": 1, "x": 0, "y": 0, "z": 0, "loads": [] }],
+  "members": [],
+  "sections": [],
+  "materials": [],
+  "boundaries": [],
+  "springs": [],
+  "walls": [],
+  "calcCaseMemo": []
+}
 ```
-START                          # ファイル開始
-TITLE                          # タイトルセクション
-CONTROL / M-CONTROL            # 制御パラメータ
-NODE                           # 節点データ（番号, X, Y, Z, ...）
-BOUNDARY                       # 境界条件（拘束情報）
-MATERIAL                       # 材料データ（ヤング係数, せん断弾性係数 等）
-SECTION                        # 断面データ（断面積, 断面二次モーメント 等）
-MEM1-SPRING                    # バネデータ（省略可）
-MEMBER                         # 部材データ（I端・J端節点, 断面番号 等）
-WALL                           # 壁エレメント（省略可）
-AI-LOAD                        # 荷重制御
-LOAD-DEFINITION                # 荷重定義（複数ケース、繰り返し）
-  F-NODE                       #   節点荷重
-  F-CMQ                        #   CMQ 荷重
-  F-MEMBER                     #   部材荷重
-CALCULATION-CASE               # 荷重組合せ情報（省略可）
-STOP                           # ファイル終了
-```
-
-各セクションはキーワード行で区切られます。省略可能なセクション（`MEM1-SPRING`、`WALL`）が存在しない場合は、次のセクションに直接移行します。
-
-</details>
-
-詳細な仕様は [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) を参照してください。
 
 ## 開発
 
@@ -179,7 +166,7 @@ npm run build
 GitHub Actions により、プッシュおよびプルリクエスト時に以下が自動実行されます。
 
 - TypeScript 型チェック
-- Vitest テスト（91 テストケース）
+- Vitest テスト（65 テストケース）
 - プロダクションビルド
 
 ## 更新履歴
@@ -189,7 +176,7 @@ GitHub Actions により、プッシュおよびプルリクエスト時に以�
 初回リリース。
 
 - 3D モデルビューア（Three.js）による立体フレームモデルの表示
-- StructForm フォーマット（`.dat`）の読み込み・書き出し（Shift_JIS / UTF-8 対応）
+- JSON 形式の読み込み・書き出し
 - タブ切替式データグリッドによるモデル要素の編集
 - 節点ソート・番号再割当・重複ノード統合
 - 複数荷重ケースの管理
@@ -198,7 +185,7 @@ GitHub Actions により、プッシュおよびプルリクエスト時に以�
 - ビルトインヘルプダイアログ
 - SVG ファビコン
 - GitHub Actions CI（型チェック・テスト・ビルド）
-- Vitest によるテストスイート（91 テストケース）
+- Vitest によるテストスイート（65 テストケース）
 
 ## ライセンス
 
