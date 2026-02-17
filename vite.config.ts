@@ -2,7 +2,7 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  base: './',
+  base: '/FrameModelMaker-Web/',
   build: {
     outDir: 'dist',
   },
