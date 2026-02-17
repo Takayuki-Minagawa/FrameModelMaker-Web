@@ -1,6 +1,6 @@
 # 技術仕様書
 
-FrameModelMaker-Web の内部データモデル、StructForm ファイルフォーマット、UI 構成に関する詳細な技術仕様です。
+FrameModelMaker-Web の内部データモデル、JSON ファイルフォーマット、UI 構成に関する詳細な技術仕様です。
 
 ---
 
@@ -19,7 +19,7 @@ interface Node {
   longWeight: number;      // 長期荷重用節点重量
   forceWeight: number;     // 地震力算定用節点重量
   addForceWeight: number;  // 地震力算定用節点付加重量
-  area: number;            // 面積 (cm²)
+  area: number;            // 面積 (cm^2)
   boundaryCondition: BoundaryCondition | null;
   loads: NodeLoad[];       // 荷重定義ごとの節点荷重
 }
@@ -74,7 +74,7 @@ interface Section {
   materialNumber: number;
   type: SectionType;
   shape: SectionShape;
-  p1_A: number;    // 断面積 (cm²)
+  p1_A: number;    // 断面積 (cm^2)
   p2_Ix: number;   // 断面二次モーメント Ix
   p3_Iy: number;   // 断面二次モーメント Iy
   p4_Iz: number;   // 断面二次モーメント Iz
@@ -89,7 +89,7 @@ interface Section {
 ```typescript
 interface Material {
   number: number;
-  young: number;      // ヤング係数 (kN/cm²)
+  young: number;      // ヤング係数 (kN/cm^2)
   shear: number;      // せん断弾性係数
   expansion: number;  // 熱膨張係数
   poisson: number;    // ポアソン比
@@ -150,9 +150,9 @@ interface Wall {
 | p1 | X 方向力 (kN) |
 | p2 | Y 方向力 (kN) |
 | p3 | Z 方向力 (kN) |
-| m1 | X 軸モーメント (kN\*cm) |
-| m2 | Y 軸モーメント (kN\*cm) |
-| m3 | Z 軸モーメント (kN\*cm) |
+| m1 | X 軸モーメント (kN*cm) |
+| m2 | Y 軸モーメント (kN*cm) |
+| m3 | Z 軸モーメント (kN*cm) |
 
 #### CMQLoad（CMQ 荷重）
 
@@ -193,85 +193,71 @@ interface Wall {
 
 ---
 
-## StructForm ファイルフォーマット詳細
+## JSON ファイルフォーマット詳細
 
-テキスト形式、Shift_JIS エンコーディング。区切り文字はカンマ（`,`）。
+### ルート構造
 
-### ファイル全体構造
+保存・読込に使う JSON のルートはオブジェクトで、主要キーは以下です。
 
-```
-START                                                       Windows 8.00
-TITLE
-"タイトル文字列"
-CONTROL
-0,0,0, 5,, 5
-M-CONTROL
- 1 , 1 , 0 , 0 , 0 , 0
- 0 , 0 , 0 , 5 , 80
- 1 ,2.0,1.1,60,
- 1 ,2.0,1.1,2.0,0.2,60
- 0 , 1 , 1 , 1 ,20,15, 1 ,,
- 0 , 1 , 1 , 1 ,20,15,1.0,1.0
-NODE
-    番号,X座標,Y座標,Z座標,,    0,0.0,0.0,,0.0,
-    ...
-BOUNDARY
-1,""
-    節点番号,DeltaX,DeltaY,DeltaZ,ThetaX,ThetaY,ThetaZ,,,,,,
-    ...
-MATERIAL
-    番号,Young,Shear,Expansion,Poisson,UnitLoad,Name
-    ...
-M-MATERIAL
-    （デフォルト値）
-SECTION
-    番号,材料番号,Type,Shape,P1_A,P2_Ix,P3_Iy,P4_Iz,,,Ky,Kz,,,,,0,0,,,,,Comment
-    ...
-MEM1-SPRING
-    番号,Method,K_Theta
-    ...
-MEMBER
-    番号,I端番号,J端番号,Ix,Iy,Iz,Jx,Jy,Jz,断面番号,    0,5,P1,P2,P3,...
-    ...
-WALL（壁がある場合のみ）
-    番号,左下,右下,左上,右上,材料番号,Method,P1,P2,P3,P4,
-    ...
-AI-LOAD
-0,0,1.0,2,0.2,0.0,  0
-LOAD-DEFINITION（荷重定義ごとに繰り返し）
- 定義番号,0,0,0,"",0
-F-NODE
-    節点番号,P1,P2,P3,M1,M2,M3
-    ...
-F-CMQ
-    部材番号,Moy,Moz,iMy,iMz,iQx,iQy,iQz,jMy,jMz,jQx,jQy,jQz
-    ...
-F-MEMBER
-    部材番号,LengthMethod,Type,Direction,Scale,LoadCode,UnitLoad,P1,P2,P3,...
-    ...
-CALCULATION-CASE
-    荷重組合せ情報行...
-STOP
+```typescript
+interface FrameJsonDocument {
+  title: string;
+  loadCaseCount: number;
+  loadCaseIndex: number;
+  calcCaseMemo: string[];
+  nodes: NodeJson[];
+  members: MemberJson[];
+  sections: SectionJson[];
+  materials: MaterialJson[];
+  boundaries: BoundaryJson[];
+  springs: SpringJson[];
+  walls: WallJson[];
+}
 ```
 
-### パーサー実装上の注意点
+### 最小例
 
-1. 各セクションはキーワード行（`NODE`, `BOUNDARY`, `MATERIAL` 等）で区切られる
-2. `M-CONTROL` セクションは行数不定のため、`NODE` キーワードが現れるまでスキップ
-3. `M-MATERIAL` セクションも同様に、`SECTION` キーワードまでスキップ
-4. `MEM1-SPRING` セクションが存在しない場合は、`SECTION` の直後に `MEMBER` が現れる
-5. `WALL` セクションが存在しない場合は、`MEMBER` の直後に `AI-LOAD` が現れる
-6. 空文字列のフィールドは 0 として扱う
-7. 数値は科学記数法（例: `6.384E+00`）を含む場合がある
-8. `LOAD-DEFINITION` は荷重定義数分繰り返され、各定義内に `F-NODE`, `F-CMQ`, `F-MEMBER` が順に出現する
-9. ゼロの荷重値は出力を省略する
+```json
+{
+  "title": "Sample",
+  "loadCaseCount": 1,
+  "loadCaseIndex": 0,
+  "calcCaseMemo": [],
+  "nodes": [],
+  "members": [],
+  "sections": [],
+  "materials": [],
+  "boundaries": [],
+  "springs": [],
+  "walls": []
+}
+```
 
-### 数値フォーマット（書き出し時）
+### パース実装上の仕様
 
-| 種別 | フォーマット | 例 |
-|------|------------|-----|
-| 浮動小数点 | `value.toExponential(3).toUpperCase()` | `6.384E+00` |
-| 整数（右寄せ） | `String(n).padStart(width, ' ')` | `    1` |
+1. ルートがオブジェクトでない場合はエラー
+2. 各配列キーは省略可能（省略時は空配列）
+3. 数値・文字列・真偽値は不正値の場合に既定値へフォールバック
+4. `loadCaseCount` は `1` 以上に補正
+5. 実際の `loadCaseCount` は、`nodes[].loads` と `members[].memberLoads/cmqLoads` の最大長を下回らないよう補正
+6. `loadCaseIndex` は `0` 以上 `loadCaseCount - 1` 以下へ補正
+7. 読込後、全節点/部材の荷重配列は `setLoadCaseCount` で長さを揃える
+8. `boundaries` は `nodeNumber` で節点へ再リンクして `boundaryCondition` を復元
+9. 未知キーは無視（前方互換）
+
+### 書き出し仕様
+
+1. `JSON.stringify(..., null, 2)` で 2 スペース整形
+2. 出力ファイル拡張子は `.json`
+3. 内部状態の一時フラグ（例: `selected`, `isShown`）は保存対象外
+
+### サンプルデータ
+
+同梱サンプル:
+
+- `public/samples/FrameModel_Sample.json`
+
+このサンプルはオリジナル建物モデルデータを JSON 化したものです。
 
 ---
 
@@ -312,9 +298,9 @@ STOP
 | メニュー | 項目 | 動作 |
 |---------|------|------|
 | ファイル | 新規作成 | ドキュメント初期化 |
-| | 開く | `.dat` ファイル読み込み |
-| | 保存 | StructForm フォーマットでダウンロード |
-| | サンプル読込 | 内蔵サンプルデータ読み込み |
+| | 開く | `.json` ファイル読み込み |
+| | 保存 | JSON ファイルでダウンロード |
+| | サンプル読込 | 内蔵 JSON サンプル読み込み |
 | 表示 | 節点番号表示 | 3D ビュー上の番号表示切替 |
 | | 部材番号表示 | 3D ビュー上の番号表示切替 |
 | 編集 | ソート | 節点・部材を座標順にソート |
