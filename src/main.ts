@@ -46,6 +46,7 @@ const tabDefs = [
 function init(): void {
   setupMenu();
   setupTabs();
+  setupToolbar();
   setupViewer();
   setupResizer();
   setupThemeToggle();
@@ -90,6 +91,12 @@ function applyI18n(): void {
   // ヘルプダイアログのタイトルを更新
   const helpTitle = document.getElementById('help-title');
   if (helpTitle) helpTitle.textContent = t('help.title');
+
+  // ツールバーボタンのラベルを更新
+  const btnAdd = document.getElementById('btn-add-row');
+  if (btnAdd) btnAdd.textContent = '+ ' + t('toolbar.addRow');
+  const btnDel = document.getElementById('btn-delete-row');
+  if (btnDel) btnDel.textContent = '- ' + t('toolbar.deleteRow');
 
   // グリッドを更新（列ヘッダーの言語を反映）
   refreshGrid();
@@ -214,6 +221,124 @@ function setupHelp(): void {
       if (e.target === overlay) overlay.classList.add('hidden');
     });
   }
+}
+
+// ===== ツールバー（行追加・削除） =====
+const LOAD_TABS = ['nodeloads', 'cmqloads', 'memberloads'];
+
+function setupToolbar(): void {
+  const toolbar = document.getElementById('grid-toolbar')!;
+
+  const btnGroup = document.createElement('div');
+  btnGroup.id = 'toolbar-buttons';
+
+  const btnAdd = document.createElement('button');
+  btnAdd.id = 'btn-add-row';
+  btnAdd.className = 'toolbar-btn';
+  btnAdd.textContent = '+ ' + t('toolbar.addRow');
+  btnAdd.addEventListener('click', () => addRow());
+
+  const btnDel = document.createElement('button');
+  btnDel.id = 'btn-delete-row';
+  btnDel.className = 'toolbar-btn toolbar-btn-danger';
+  btnDel.textContent = '- ' + t('toolbar.deleteRow');
+  btnDel.addEventListener('click', () => deleteRow());
+
+  btnGroup.appendChild(btnAdd);
+  btnGroup.appendChild(btnDel);
+  toolbar.appendChild(btnGroup);
+}
+
+function updateToolbarVisibility(): void {
+  const btnGroup = document.getElementById('toolbar-buttons');
+  if (btnGroup) {
+    btnGroup.style.display = LOAD_TABS.includes(activeTab) ? 'none' : 'flex';
+  }
+}
+
+function nextNumber(items: { number: number }[]): number {
+  return items.length === 0 ? 1 : Math.max(...items.map(i => i.number)) + 1;
+}
+
+function addRow(): void {
+  switch (activeTab) {
+    case 'nodes': {
+      const n = new Node();
+      n.number = doc.newNodeNumber;
+      doc.nodes.push(n);
+      break;
+    }
+    case 'boundaries': {
+      const bc = new BoundaryCondition();
+      bc.nodeNumber = nextNumber(doc.boundaries.length > 0 ? doc.boundaries.map(b => ({ number: b.nodeNumber })) : []);
+      doc.boundaries.push(bc);
+      break;
+    }
+    case 'materials': {
+      const m = new Material();
+      m.number = nextNumber(doc.materials);
+      doc.materials.push(m);
+      break;
+    }
+    case 'sections': {
+      const s = new Section();
+      s.number = nextNumber(doc.sections);
+      doc.sections.push(s);
+      break;
+    }
+    case 'springs': {
+      const sp = new Spring();
+      sp.number = nextNumber(doc.springs);
+      doc.springs.push(sp);
+      break;
+    }
+    case 'members': {
+      const mem = new Member();
+      mem.number = doc.newMemberNumber;
+      doc.members.push(mem);
+      break;
+    }
+    case 'walls': {
+      const w = new Wall();
+      w.number = nextNumber(doc.walls);
+      doc.walls.push(w);
+      break;
+    }
+    default:
+      return;
+  }
+  refreshGrid();
+  viewer.updateModel();
+}
+
+function deleteRow(): void {
+  switch (activeTab) {
+    case 'nodes':
+      if (doc.nodes.length > 0) doc.nodes.pop();
+      break;
+    case 'boundaries':
+      if (doc.boundaries.length > 0) doc.boundaries.pop();
+      break;
+    case 'materials':
+      if (doc.materials.length > 0) doc.materials.pop();
+      break;
+    case 'sections':
+      if (doc.sections.length > 0) doc.sections.pop();
+      break;
+    case 'springs':
+      if (doc.springs.length > 0) doc.springs.pop();
+      break;
+    case 'members':
+      if (doc.members.length > 0) doc.members.pop();
+      break;
+    case 'walls':
+      if (doc.walls.length > 0) doc.walls.pop();
+      break;
+    default:
+      return;
+  }
+  refreshGrid();
+  viewer.updateModel();
 }
 
 // ===== ファイル操作 =====
@@ -359,6 +484,7 @@ function showTab(tabId: string): void {
     el.classList.toggle('active', (el as HTMLElement).dataset.tabId === tabId);
   });
 
+  updateToolbarVisibility();
   refreshGrid();
 }
 

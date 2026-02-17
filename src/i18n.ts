@@ -53,6 +53,8 @@ const messages: Record<Lang, Record<string, string>> = {
 
     // ツールバー
     'toolbar.dataEdit': 'データ編集',
+    'toolbar.addRow': '行追加',
+    'toolbar.deleteRow': '行削除',
 
     // 荷重セレクタ
     'loadcase.label': '荷重定義 {0}',
@@ -219,6 +221,8 @@ const messages: Record<Lang, Record<string, string>> = {
 
     // Toolbar
     'toolbar.dataEdit': 'Data Editor',
+    'toolbar.addRow': 'Add Row',
+    'toolbar.deleteRow': 'Delete Row',
 
     // Load case selector
     'loadcase.label': 'Load Case {0}',

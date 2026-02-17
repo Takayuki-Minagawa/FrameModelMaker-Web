@@ -335,6 +335,20 @@ html, body {
   background: var(--accent-hover);
 }
 
+.toolbar-btn-danger {
+  background: #e74c3c;
+}
+
+.toolbar-btn-danger:hover {
+  background: #c0392b;
+}
+
+#toolbar-buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
 /* ===== ステータスバー ===== */
 #status-bar {
   height: 24px;
