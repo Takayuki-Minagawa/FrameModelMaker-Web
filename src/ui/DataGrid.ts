@@ -1,6 +1,6 @@
 export interface ColumnDef<T> {
   key: keyof T & string;
-  header: string;
+  header?: string;
   width?: string;
   type?: 'number' | 'text' | 'int';
   readOnly?: boolean;
@@ -68,7 +68,7 @@ export class DataGrid<T extends Record<string, any>> {
     const headerRow = document.createElement('tr');
     for (const col of this.columns) {
       const th = document.createElement('th');
-      th.textContent = col.header;
+      th.textContent = col.header ?? col.key;
       if (col.width) th.style.width = col.width;
       headerRow.appendChild(th);
     }
