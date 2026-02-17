@@ -1,3 +1,90 @@
+/* ===== CSS変数: ライトモード ===== */
+:root {
+  --bg-body: #e8e8e8;
+  --bg-menu: #2c3e50;
+  --bg-menu-hover: #34495e;
+  --text-menu: #ecf0f1;
+  --bg-dropdown: #fff;
+  --text-dropdown: #333;
+  --border-dropdown: #ccc;
+  --shadow-dropdown: rgba(0,0,0,0.15);
+  --bg-dropdown-hover: #3498db;
+  --bg-viewer: #f0f0f0;
+  --bg-panel: #fff;
+  --bg-tab: #ecf0f1;
+  --border-tab: #bdc3c7;
+  --bg-tab-active: #fff;
+  --bg-tab-hover: #d5dbdb;
+  --bg-grid-header: #34495e;
+  --text-grid-header: #fff;
+  --border-grid-row: #eee;
+  --bg-grid-row-hover: #eaf2f8;
+  --bg-grid-input-focus: #fff;
+  --text-readonly: #666;
+  --bg-status: #2c3e50;
+  --text-status: #bdc3c7;
+  --bg-toolbar: #f8f8f8;
+  --text-toolbar: #666;
+  --accent: #3498db;
+  --accent-hover: #2980b9;
+  --border: #ddd;
+  --border-light: #eee;
+  --bg-resize: #bdc3c7;
+  --bg-input: transparent;
+  --text-input: inherit;
+  --bg-help: #fff;
+  --text-help: #333;
+  --bg-help-header: #f0f0f0;
+  --bg-overlay: rgba(0,0,0,0.4);
+  --bg-btn-right: transparent;
+  --text-btn-right: #ecf0f1;
+  --border-btn-right: rgba(255,255,255,0.3);
+}
+
+/* ===== CSS変数: ダークモード ===== */
+:root[data-theme="dark"] {
+  --bg-body: #1a1a2e;
+  --bg-menu: #16213e;
+  --bg-menu-hover: #1a2744;
+  --text-menu: #d0d0e0;
+  --bg-dropdown: #1e1e32;
+  --text-dropdown: #d0d0e0;
+  --border-dropdown: #2a2a44;
+  --shadow-dropdown: rgba(0,0,0,0.4);
+  --bg-dropdown-hover: #2a5a8a;
+  --bg-viewer: #252535;
+  --bg-panel: #1e1e2e;
+  --bg-tab: #252535;
+  --border-tab: #3a3a4a;
+  --bg-tab-active: #1e1e2e;
+  --bg-tab-hover: #2a2a3e;
+  --bg-grid-header: #2a2a4a;
+  --text-grid-header: #d0d0e0;
+  --border-grid-row: #2a2a3a;
+  --bg-grid-row-hover: #2a2a4a;
+  --bg-grid-input-focus: #2a2a3e;
+  --text-readonly: #808090;
+  --bg-status: #16213e;
+  --text-status: #8080a0;
+  --bg-toolbar: #252535;
+  --text-toolbar: #8080a0;
+  --accent: #5dade2;
+  --accent-hover: #4a9ad4;
+  --border: #3a3a4a;
+  --border-light: #2a2a3a;
+  --bg-resize: #3a3a4a;
+  --bg-input: transparent;
+  --text-input: #d0d0e0;
+  --bg-help: #1e1e32;
+  --text-help: #d0d0e0;
+  --bg-help-header: #252540;
+  --bg-overlay: rgba(0,0,0,0.6);
+  --bg-btn-right: transparent;
+  --text-btn-right: #d0d0e0;
+  --border-btn-right: rgba(255,255,255,0.2);
+}
+
+/* ===== リセット ===== */
 * {
   margin: 0;
   padding: 0;
@@ -10,15 +97,16 @@ html, body {
   font-family: 'Segoe UI', 'Meiryo', sans-serif;
   font-size: 13px;
   overflow: hidden;
-  background: #e8e8e8;
+  background: var(--bg-body);
+  color: var(--text-input);
 }
 
-/* メニューバー */
+/* ===== メニューバー ===== */
 #menu-bar {
   display: flex;
   align-items: center;
-  background: #2c3e50;
-  color: #ecf0f1;
+  background: var(--bg-menu);
+  color: var(--text-menu);
   height: 32px;
   padding: 0 8px;
   gap: 2px;
@@ -34,7 +122,7 @@ html, body {
 }
 
 #menu-bar .menu-item:hover {
-  background: #34495e;
+  background: var(--bg-menu-hover);
 }
 
 #menu-bar .menu-dropdown {
@@ -42,10 +130,10 @@ html, body {
   position: absolute;
   top: 28px;
   left: 0;
-  background: #fff;
-  color: #333;
-  border: 1px solid #ccc;
-  box-shadow: 2px 2px 8px rgba(0,0,0,0.15);
+  background: var(--bg-dropdown);
+  color: var(--text-dropdown);
+  border: 1px solid var(--border-dropdown);
+  box-shadow: 2px 2px 8px var(--shadow-dropdown);
   min-width: 180px;
   z-index: 1000;
   border-radius: 3px;
@@ -63,18 +151,46 @@ html, body {
 }
 
 #menu-bar .menu-dropdown div:hover {
-  background: #3498db;
+  background: var(--bg-dropdown-hover);
   color: #fff;
 }
 
 #menu-bar .menu-dropdown .separator {
-  border-top: 1px solid #ddd;
+  border-top: 1px solid var(--border);
   padding: 0;
   margin: 2px 0;
   cursor: default;
 }
 
-/* メインコンテンツ */
+#menu-bar .menu-dropdown .separator:hover {
+  background: transparent;
+  color: inherit;
+}
+
+/* 右端ボタン群 */
+#menu-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#menu-right button {
+  background: var(--bg-btn-right);
+  color: var(--text-btn-right);
+  border: 1px solid var(--border-btn-right);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+#menu-right button:hover {
+  background: var(--bg-menu-hover);
+}
+
+/* ===== メインコンテンツ ===== */
 #main-content {
   display: flex;
   height: calc(100vh - 32px - 24px);
@@ -84,28 +200,28 @@ html, body {
 #viewer-panel {
   flex: 1;
   position: relative;
-  background: #f0f0f0;
+  background: var(--bg-viewer);
   min-width: 300px;
 }
 
 /* リサイズハンドル */
 #resize-handle {
   width: 5px;
-  background: #bdc3c7;
+  background: var(--bg-resize);
   cursor: col-resize;
   flex-shrink: 0;
 }
 
 #resize-handle:hover {
-  background: #3498db;
+  background: var(--accent);
 }
 
-/* データパネル */
+/* ===== データパネル ===== */
 #data-panel {
   width: 500px;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--bg-panel);
   overflow: hidden;
 }
 
@@ -113,8 +229,8 @@ html, body {
 #tab-bar {
   display: flex;
   flex-wrap: wrap;
-  background: #ecf0f1;
-  border-bottom: 1px solid #bdc3c7;
+  background: var(--bg-tab);
+  border-bottom: 1px solid var(--border-tab);
   min-height: 28px;
 }
 
@@ -122,27 +238,26 @@ html, body {
   padding: 4px 10px;
   cursor: pointer;
   font-size: 12px;
-  border-right: 1px solid #ddd;
+  border-right: 1px solid var(--border);
   white-space: nowrap;
 }
 
 #tab-bar .tab.active {
-  background: #fff;
+  background: var(--bg-tab-active);
   font-weight: bold;
-  border-bottom: 2px solid #3498db;
+  border-bottom: 2px solid var(--accent);
 }
 
 #tab-bar .tab:hover:not(.active) {
-  background: #d5dbdb;
+  background: var(--bg-tab-hover);
 }
 
-/* グリッドコンテナ */
+/* ===== グリッド ===== */
 #grid-container {
   flex: 1;
   overflow: auto;
 }
 
-/* データグリッド */
 .data-grid {
   width: 100%;
   border-collapse: collapse;
@@ -150,8 +265,8 @@ html, body {
 }
 
 .data-grid thead th {
-  background: #34495e;
-  color: #fff;
+  background: var(--bg-grid-header);
+  color: var(--text-grid-header);
   padding: 4px 6px;
   text-align: left;
   position: sticky;
@@ -163,11 +278,11 @@ html, body {
 
 .data-grid tbody td {
   padding: 1px 2px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-grid-row);
 }
 
 .data-grid tbody tr:hover {
-  background: #eaf2f8;
+  background: var(--bg-grid-row-hover);
 }
 
 .data-grid input {
@@ -176,35 +291,39 @@ html, body {
   padding: 2px 4px;
   font-size: 12px;
   font-family: 'Consolas', 'Courier New', monospace;
-  background: transparent;
+  background: var(--bg-input);
+  color: var(--text-input);
 }
 
 .data-grid input:focus {
-  border-color: #3498db;
-  background: #fff;
+  border-color: var(--accent);
+  background: var(--bg-grid-input-focus);
   outline: none;
 }
 
 .data-grid input[readonly] {
-  color: #666;
+  color: var(--text-readonly);
 }
 
-/* ステータスバー */
-#status-bar {
-  height: 24px;
-  background: #2c3e50;
-  color: #bdc3c7;
+/* ===== ツールバー ===== */
+#grid-toolbar {
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  font-size: 12px;
+  padding: 4px 8px;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  gap: 4px;
 }
 
-/* ツールバーボタン */
+#grid-toolbar #toolbar-label {
+  font-size: 12px;
+  color: var(--text-toolbar);
+}
+
 .toolbar-btn {
   padding: 2px 8px;
   margin: 0 2px;
-  background: #3498db;
+  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 3px;
@@ -213,20 +332,119 @@ html, body {
 }
 
 .toolbar-btn:hover {
-  background: #2980b9;
+  background: var(--accent-hover);
 }
 
-#grid-toolbar {
+/* ===== ステータスバー ===== */
+#status-bar {
+  height: 24px;
+  background: var(--bg-status);
+  color: var(--text-status);
   display: flex;
   align-items: center;
-  padding: 4px 8px;
-  background: #f8f8f8;
-  border-bottom: 1px solid #ddd;
-  gap: 4px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
-/* 荷重定義セレクタ */
+/* ===== 荷重定義セレクタ ===== */
 #load-case-selector {
   padding: 2px 4px;
   font-size: 12px;
+  background: var(--bg-panel);
+  color: var(--text-input);
+  border: 1px solid var(--border);
+}
+
+/* ===== ヘルプダイアログ ===== */
+#help-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+#help-overlay.hidden {
+  display: none;
+}
+
+#help-dialog {
+  background: var(--bg-help);
+  color: var(--text-help);
+  border-radius: 8px;
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+#help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-help-header);
+  border-radius: 8px 8px 0 0;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+#help-header button {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: var(--text-help);
+  line-height: 1;
+  padding: 0 4px;
+}
+
+#help-header button:hover {
+  color: var(--accent);
+}
+
+#help-body {
+  padding: 16px;
+  overflow-y: auto;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+#help-body h3 {
+  margin-top: 16px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+#help-body h3:first-child {
+  margin-top: 0;
+}
+
+#help-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+}
+
+#help-body table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-light);
+  vertical-align: top;
+}
+
+#help-body table td:first-child {
+  width: 120px;
+  white-space: nowrap;
+}
+
+/* ===== ユーティリティ ===== */
+.hidden {
+  display: none !important;
 }

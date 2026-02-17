@@ -8,12 +8,27 @@ const CAMERA_NEAR = 1;
 const CAMERA_FAR = 100000;
 const CAMERA_INITIAL_POS = { x: 500, y: -1000, z: 800 };
 
-const BACKGROUND_COLOR = 0xf0f0f0;
 const GRID_SIZE = 2000;
 const GRID_DIVISIONS = 20;
-const GRID_COLOR_CENTER = 0xcccccc;
-const GRID_COLOR_LINE = 0xeeeeee;
 const AXIS_HELPER_SIZE = 200;
+
+// テーマ別カラー
+const THEME = {
+  light: {
+    background: 0xf0f0f0,
+    gridCenter: 0xcccccc,
+    gridLine: 0xeeeeee,
+    labelNode: '#0044aa',
+    labelMember: '#aa4400',
+  },
+  dark: {
+    background: 0x252535,
+    gridCenter: 0x3a3a4a,
+    gridLine: 0x333344,
+    labelNode: '#66aaff',
+    labelMember: '#ffaa66',
+  },
+} as const;
 
 const NODE_POINT_SIZE = 8;
 const NODE_COLOR_DEFAULT: [number, number, number] = [0, 0.3, 0.8];
@@ -30,8 +45,6 @@ const WALL_FILL_OPACITY = 0.3;
 const WALL_EDGE_COLOR = 0x4477aa;
 
 const LABEL_FONT = '11px sans-serif';
-const LABEL_COLOR_NODE = '#0044aa';
-const LABEL_COLOR_MEMBER = '#aa4400';
 
 export class ModelViewer {
   private scene: THREE.Scene;
@@ -45,7 +58,10 @@ export class ModelViewer {
   private wallGroup: THREE.Group;
   private labelGroup: THREE.Group;
 
+  private grid: THREE.GridHelper;
+
   private doc: FrameDocument;
+  private isDark: boolean = false;
 
   showNodeNumbers: boolean = false;
   showMemberNumbers: boolean = false;
@@ -62,7 +78,7 @@ export class ModelViewer {
 
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(BACKGROUND_COLOR);
+    this.scene.background = new THREE.Color(THEME.light.background);
 
     // Camera
     const aspect = container.clientWidth / container.clientHeight;
@@ -103,9 +119,9 @@ export class ModelViewer {
     this.scene.add(this.labelGroup);
 
     // グリッド（XY平面、Z=0）
-    const grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, GRID_COLOR_CENTER, GRID_COLOR_LINE);
-    grid.rotation.x = Math.PI / 2;
-    this.scene.add(grid);
+    this.grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, THEME.light.gridCenter, THEME.light.gridLine);
+    this.grid.rotation.x = Math.PI / 2;
+    this.scene.add(this.grid);
 
     // 軸ヘルパー
     const axes = new THREE.AxesHelper(AXIS_HELPER_SIZE);
@@ -345,7 +361,8 @@ export class ModelViewer {
     const worldPos = new THREE.Vector3();
 
     if (this.showNodeNumbers) {
-      this.labelCtx.fillStyle = LABEL_COLOR_NODE;
+      const colors = this.isDark ? THEME.dark : THEME.light;
+      this.labelCtx.fillStyle = colors.labelNode;
       for (const node of this.doc.nodes) {
         worldPos.set(node.x, node.y, node.z);
         const screen = this.projectToScreen(worldPos, tempVec);
@@ -356,7 +373,8 @@ export class ModelViewer {
     }
 
     if (this.showMemberNumbers) {
-      this.labelCtx.fillStyle = LABEL_COLOR_MEMBER;
+      const colors = this.isDark ? THEME.dark : THEME.light;
+      this.labelCtx.fillStyle = colors.labelMember;
       for (const mem of this.doc.members) {
         const iNode = this.doc.findNodeByNumber(mem.iNodeNumber);
         const jNode = this.doc.findNodeByNumber(mem.jNodeNumber);
@@ -372,6 +390,23 @@ export class ModelViewer {
         }
       }
     }
+  }
+
+  /** ダーク/ライトテーマを切替 */
+  setTheme(dark: boolean): void {
+    this.isDark = dark;
+    const colors = dark ? THEME.dark : THEME.light;
+
+    // 背景色
+    (this.scene.background as THREE.Color).set(colors.background);
+
+    // グリッド色を更新
+    this.scene.remove(this.grid);
+    this.grid.geometry.dispose();
+    (this.grid.material as THREE.Material).dispose();
+    this.grid = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, colors.gridCenter, colors.gridLine);
+    this.grid.rotation.x = Math.PI / 2;
+    this.scene.add(this.grid);
   }
 
   dispose(): void {

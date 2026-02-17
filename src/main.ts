@@ -14,6 +14,7 @@ import { Wall } from './models/Wall';
 import { NodeLoad } from './models/NodeLoad';
 import { CMQLoad } from './models/CMQLoad';
 import { MemberLoad } from './models/MemberLoad';
+import { t, getLang, setLang, Lang } from './i18n';
 
 // ===== 定数 =====
 const MERGE_NODE_THRESHOLD = 2.0;
@@ -27,20 +28,80 @@ let viewer: ModelViewer;
 let currentGrid: DataGrid<any> | null = null;
 let activeTab = 'nodes';
 
+// ===== タブ定義 =====
+const tabDefs = [
+  { id: 'nodes', i18nKey: 'tab.nodes' },
+  { id: 'boundaries', i18nKey: 'tab.boundaries' },
+  { id: 'materials', i18nKey: 'tab.materials' },
+  { id: 'sections', i18nKey: 'tab.sections' },
+  { id: 'springs', i18nKey: 'tab.springs' },
+  { id: 'members', i18nKey: 'tab.members' },
+  { id: 'walls', i18nKey: 'tab.walls' },
+  { id: 'nodeloads', i18nKey: 'tab.nodeloads' },
+  { id: 'cmqloads', i18nKey: 'tab.cmqloads' },
+  { id: 'memberloads', i18nKey: 'tab.memberloads' },
+];
+
 // ===== 初期化 =====
 function init(): void {
   setupMenu();
   setupTabs();
   setupViewer();
   setupResizer();
-  updateStatus('準備完了');
+  setupThemeToggle();
+  setupLangToggle();
+  setupHelp();
+  applyI18n();
+  updateStatus(t('status.ready'));
   showTab('nodes');
+}
+
+// ===== i18n 適用 =====
+function applyI18n(): void {
+  // data-i18n 属性を持つ全要素のテキストを更新
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n!;
+    el.textContent = t(key);
+  });
+
+  // タブラベルを更新
+  document.querySelectorAll<HTMLElement>('#tab-bar .tab').forEach(el => {
+    const tabId = el.dataset.tabId;
+    const def = tabDefs.find(td => td.id === tabId);
+    if (def) el.textContent = t(def.i18nKey);
+  });
+
+  // 荷重定義セレクタを更新
+  updateLoadCaseSelector();
+
+  // テーマボタンのラベルを更新
+  const btnTheme = document.getElementById('btn-theme');
+  if (btnTheme) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    btnTheme.textContent = isDark ? t('theme.light') : t('theme.dark');
+  }
+
+  // 言語ボタンのラベルを更新
+  const btnLang = document.getElementById('btn-lang');
+  if (btnLang) {
+    btnLang.textContent = getLang() === 'ja' ? 'EN' : 'JA';
+  }
+
+  // ヘルプダイアログのタイトルを更新
+  const helpTitle = document.getElementById('help-title');
+  if (helpTitle) helpTitle.textContent = t('help.title');
+
+  // グリッドを更新（列ヘッダーの言語を反映）
+  refreshGrid();
 }
 
 // ===== メニュー =====
 function setupMenu(): void {
   // ファイルメニュー
-  on('menu-new', () => { doc.init(); viewer.updateModel(); refreshGrid(); updateStatus('新規作成'); });
+  on('menu-new', () => {
+    doc.init(); viewer.updateModel(); refreshGrid();
+    updateStatus(t('status.newCreated'));
+  });
   on('menu-open', () => openFile());
   on('menu-save', () => saveFile());
   on('menu-sample', () => loadSample());
@@ -48,30 +109,39 @@ function setupMenu(): void {
   // 表示メニュー
   on('menu-show-node-num', () => {
     viewer.showNodeNumbers = !viewer.showNodeNumbers;
-    updateStatus(viewer.showNodeNumbers ? '節点番号: 表示' : '節点番号: 非表示');
+    updateStatus(t(viewer.showNodeNumbers ? 'status.nodeNumOn' : 'status.nodeNumOff'));
   });
   on('menu-show-member-num', () => {
     viewer.showMemberNumbers = !viewer.showMemberNumbers;
-    updateStatus(viewer.showMemberNumbers ? '部材番号: 表示' : '部材番号: 非表示');
+    updateStatus(t(viewer.showMemberNumbers ? 'status.memberNumOn' : 'status.memberNumOff'));
   });
 
   // 編集メニュー
-  on('menu-sort', () => { doc.sort(); viewer.updateModel(); refreshGrid(); updateStatus('ソート完了'); });
-  on('menu-renumber', () => { doc.assignNumbers(); viewer.updateModel(); refreshGrid(); updateStatus('番号再割当完了'); });
-  on('menu-merge', () => { doc.mergeOverlappingNodes(MERGE_NODE_THRESHOLD); viewer.updateModel(); refreshGrid(); updateStatus('重複ノード統合完了'); });
+  on('menu-sort', () => {
+    doc.sort(); viewer.updateModel(); refreshGrid();
+    updateStatus(t('status.sorted'));
+  });
+  on('menu-renumber', () => {
+    doc.assignNumbers(); viewer.updateModel(); refreshGrid();
+    updateStatus(t('status.renumbered'));
+  });
+  on('menu-merge', () => {
+    doc.mergeOverlappingNodes(MERGE_NODE_THRESHOLD); viewer.updateModel(); refreshGrid();
+    updateStatus(t('status.merged'));
+  });
 
   // 荷重定義
   on('menu-add-loadcase', () => {
     doc.addLoadCase();
     updateLoadCaseSelector();
-    updateStatus(`荷重定義 ${doc.loadCaseCount} 追加`);
+    updateStatus(t('status.loadcaseAdded', doc.loadCaseCount));
   });
   on('menu-remove-loadcase', () => {
     if (doc.loadCaseCount > 1) {
       doc.removeLoadCase(doc.loadCaseIndex);
       updateLoadCaseSelector();
       refreshGrid();
-      updateStatus('荷重定義削除');
+      updateStatus(t('status.loadcaseDeleted'));
     }
   });
 }
@@ -79,6 +149,71 @@ function setupMenu(): void {
 function on(id: string, handler: () => void): void {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', handler);
+}
+
+// ===== テーマ切替 =====
+function setupThemeToggle(): void {
+  // localStorage から復元
+  const saved = localStorage.getItem('theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+
+  on('btn-theme', () => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const newTheme = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    viewer.setTheme(newTheme === 'dark');
+
+    const btnTheme = document.getElementById('btn-theme');
+    if (btnTheme) {
+      btnTheme.textContent = newTheme === 'dark' ? t('theme.light') : t('theme.dark');
+    }
+  });
+
+  // 初期テーマをビューアに反映
+  if (saved === 'dark') {
+    // ビューアの初期化後に呼ぶため setTimeout で遅延
+    setTimeout(() => viewer.setTheme(true), 0);
+  }
+}
+
+// ===== 言語切替 =====
+function setupLangToggle(): void {
+  on('btn-lang', () => {
+    const newLang: Lang = getLang() === 'ja' ? 'en' : 'ja';
+    setLang(newLang);
+    applyI18n();
+    updateStatus(t('status.ready'));
+  });
+}
+
+// ===== ヘルプダイアログ =====
+function setupHelp(): void {
+  on('btn-help', () => {
+    const overlay = document.getElementById('help-overlay');
+    const body = document.getElementById('help-body');
+    const title = document.getElementById('help-title');
+    if (overlay && body && title) {
+      title.textContent = t('help.title');
+      body.innerHTML = t('help.content');
+      overlay.classList.remove('hidden');
+    }
+  });
+
+  on('help-close', () => {
+    const overlay = document.getElementById('help-overlay');
+    if (overlay) overlay.classList.add('hidden');
+  });
+
+  // オーバーレイクリックで閉じる
+  const overlay = document.getElementById('help-overlay');
+  if (overlay) {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.classList.add('hidden');
+    });
+  }
 }
 
 // ===== ファイル操作 =====
@@ -105,7 +240,6 @@ function openFile(): void {
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (!file) return;
-    // パース失敗時のロールバック用にバックアップを保持
     const backup = writeStructForm(doc);
     try {
       const buffer = await file.arrayBuffer();
@@ -114,13 +248,12 @@ function openFile(): void {
       viewer.updateModel();
       refreshGrid();
       updateLoadCaseSelector();
-      let status = `読込完了: ${file.name} (節点:${doc.nodes.length} 部材:${doc.members.length})`;
+      let status = t('status.fileLoaded', file.name, doc.nodes.length, doc.members.length);
       if (encoding !== 'Shift_JIS') {
-        status += ` [警告: ${encoding}でデコード]`;
+        status += t('status.encodingWarning', encoding);
       }
       updateStatus(status);
     } catch (e) {
-      // パース失敗時はバックアップからドキュメントを復元
       try {
         parseStructForm(backup, doc);
       } catch {
@@ -129,7 +262,7 @@ function openFile(): void {
       viewer.updateModel();
       refreshGrid();
       updateLoadCaseSelector();
-      updateStatus(`読込エラー: ${e instanceof Error ? e.message : String(e)}`);
+      updateStatus(t('status.loadError', e instanceof Error ? e.message : String(e)));
       console.error(e);
     }
   });
@@ -145,7 +278,7 @@ function saveFile(): void {
   a.download = (doc.title || 'model') + '.dat';
   a.click();
   URL.revokeObjectURL(url);
-  updateStatus('ファイル保存完了');
+  updateStatus(t('status.fileSaved'));
 }
 
 async function loadSample(): Promise<void> {
@@ -158,9 +291,9 @@ async function loadSample(): Promise<void> {
     viewer.updateModel();
     refreshGrid();
     updateLoadCaseSelector();
-    let status = `サンプル読込完了 (節点:${doc.nodes.length} 部材:${doc.members.length})`;
+    let status = t('status.sampleLoaded', doc.nodes.length, doc.members.length);
     if (encoding !== 'Shift_JIS') {
-      status += ` [警告: ${encoding}でデコード]`;
+      status += t('status.encodingWarning', encoding);
     }
     updateStatus(status);
   } catch (e) {
@@ -172,7 +305,7 @@ async function loadSample(): Promise<void> {
     viewer.updateModel();
     refreshGrid();
     updateLoadCaseSelector();
-    updateStatus(`サンプル読込エラー: ${e instanceof Error ? e.message : String(e)}`);
+    updateStatus(t('status.sampleError', e instanceof Error ? e.message : String(e)));
     console.error(e);
   }
 }
@@ -207,25 +340,12 @@ function setupResizer(): void {
 }
 
 // ===== タブ =====
-const tabDefs = [
-  { id: 'nodes', label: '節点' },
-  { id: 'boundaries', label: '境界条件' },
-  { id: 'materials', label: '材料' },
-  { id: 'sections', label: '断面' },
-  { id: 'springs', label: 'バネ' },
-  { id: 'members', label: '部材' },
-  { id: 'walls', label: '壁' },
-  { id: 'nodeloads', label: '節点荷重' },
-  { id: 'cmqloads', label: 'CMQ荷重' },
-  { id: 'memberloads', label: '部材荷重' },
-];
-
 function setupTabs(): void {
   const tabBar = document.getElementById('tab-bar')!;
   for (const tab of tabDefs) {
     const el = document.createElement('div');
     el.className = 'tab';
-    el.textContent = tab.label;
+    el.textContent = t(tab.i18nKey);
     el.dataset.tabId = tab.id;
     el.addEventListener('click', () => showTab(tab.id));
     tabBar.appendChild(el);
@@ -235,7 +355,6 @@ function setupTabs(): void {
 function showTab(tabId: string): void {
   activeTab = tabId;
 
-  // タブのアクティブ表示切替
   document.querySelectorAll('#tab-bar .tab').forEach(el => {
     el.classList.toggle('active', (el as HTMLElement).dataset.tabId === tabId);
   });
@@ -257,25 +376,25 @@ function refreshGrid(): void {
 
   switch (activeTab) {
     case 'nodes':
-      currentGrid = new DataGrid<Node>(container, nodeColumns, doc.nodes);
+      currentGrid = new DataGrid<Node>(container, getNodeColumns(), doc.nodes);
       break;
     case 'boundaries':
-      currentGrid = new DataGrid<BoundaryCondition>(container, boundaryColumns, doc.boundaries);
+      currentGrid = new DataGrid<BoundaryCondition>(container, getBoundaryColumns(), doc.boundaries);
       break;
     case 'materials':
-      currentGrid = new DataGrid<Material>(container, materialColumns, doc.materials);
+      currentGrid = new DataGrid<Material>(container, getMaterialColumns(), doc.materials);
       break;
     case 'sections':
-      currentGrid = new DataGrid<Section>(container, sectionColumns, doc.sections);
+      currentGrid = new DataGrid<Section>(container, getSectionColumns(), doc.sections);
       break;
     case 'springs':
-      currentGrid = new DataGrid<Spring>(container, springColumns, doc.springs);
+      currentGrid = new DataGrid<Spring>(container, getSpringColumns(), doc.springs);
       break;
     case 'members':
-      currentGrid = new DataGrid<Member>(container, memberColumns, doc.members);
+      currentGrid = new DataGrid<Member>(container, getMemberColumns(), doc.members);
       break;
     case 'walls':
-      currentGrid = new DataGrid<Wall>(container, wallColumns, doc.walls);
+      currentGrid = new DataGrid<Wall>(container, getWallColumns(), doc.walls);
       break;
     case 'nodeloads': {
       const loads = doc.nodes
@@ -284,7 +403,7 @@ function refreshGrid(): void {
           const load = n.getLoad(doc.loadCaseIndex);
           return { nodeNumber: n.number, p1: load.p1, p2: load.p2, p3: load.p3, m1: load.m1, m2: load.m2, m3: load.m3 };
         });
-      currentGrid = new DataGrid(container, nodeLoadColumns, loads);
+      currentGrid = new DataGrid(container, getNodeLoadColumns(), loads);
       break;
     }
     case 'cmqloads': {
@@ -294,7 +413,7 @@ function refreshGrid(): void {
           const load = m.getCMQLoad(doc.loadCaseIndex);
           return { memberNumber: m.number, moy: load.moy, moz: load.moz, iMy: load.iMy, iMz: load.iMz, iQx: load.iQx, iQy: load.iQy, iQz: load.iQz, jMy: load.jMy, jMz: load.jMz, jQx: load.jQx, jQy: load.jQy, jQz: load.jQz };
         });
-      currentGrid = new DataGrid(container, cmqLoadColumns, loads);
+      currentGrid = new DataGrid(container, getCMQLoadColumns(), loads);
       break;
     }
     case 'memberloads': {
@@ -304,7 +423,7 @@ function refreshGrid(): void {
           const load = m.getMemberLoad(doc.loadCaseIndex);
           return { memberNumber: m.number, lengthMethod: load.lengthMethod, type: load.type, direction: load.direction, scale: load.scale, loadCode: load.loadCode, unitLoad: load.unitLoad, p1: load.p1, p2: load.p2, p3: load.p3 };
         });
-      currentGrid = new DataGrid(container, memberLoadColumns, loads);
+      currentGrid = new DataGrid(container, getMemberLoadColumns(), loads);
       break;
     }
   }
@@ -322,7 +441,7 @@ function updateLoadCaseSelector(): void {
   for (let i = 0; i < doc.loadCaseCount; i++) {
     const opt = document.createElement('option');
     opt.value = String(i);
-    opt.textContent = `荷重定義 ${i + 1}`;
+    opt.textContent = t('loadcase.label', i + 1);
     sel.appendChild(opt);
   }
   sel.value = String(doc.loadCaseIndex);
@@ -338,132 +457,152 @@ function updateStatus(msg: string): void {
   if (el) el.textContent = msg;
 }
 
-// ===== 列定義 =====
+// ===== 列定義（関数化: 言語切替時に最新の翻訳を取得） =====
 interface NodeLoadRow { nodeNumber: number; p1: number; p2: number; p3: number; m1: number; m2: number; m3: number; }
 interface CMQLoadRow { memberNumber: number; moy: number; moz: number; iMy: number; iMz: number; iQx: number; iQy: number; iQz: number; jMy: number; jMz: number; jQx: number; jQy: number; jQz: number; }
 interface MemberLoadRow { memberNumber: number; lengthMethod: number; type: number; direction: number; scale: number; loadCode: string; unitLoad: number; p1: number; p2: number; p3: number; }
 
-const nodeColumns: ColumnDef<Node>[] = [
-  { key: 'number', header: '節点番号', width: '60px', type: 'int' },
-  { key: 'x', header: 'X座標 cm', width: '90px', type: 'number' },
-  { key: 'y', header: 'Y座標 cm', width: '90px', type: 'number' },
-  { key: 'z', header: 'Z座標 cm', width: '90px', type: 'number' },
-  { key: 'temperature', header: '節点温度', width: '70px', type: 'number' },
-  { key: 'intensityGroup', header: '震度G', width: '50px', type: 'int' },
-  { key: 'longWeight', header: '長期重量', width: '80px', type: 'number' },
-  { key: 'forceWeight', header: '地震重量', width: '80px', type: 'number' },
-  { key: 'addForceWeight', header: '付加重量', width: '80px', type: 'number' },
-  { key: 'area', header: '面積cm2', width: '70px', type: 'number' },
-];
+function getNodeColumns(): ColumnDef<Node>[] {
+  return [
+    { key: 'number', header: t('col.nodeNumber'), width: '60px', type: 'int' },
+    { key: 'x', header: t('col.xCoord'), width: '90px', type: 'number' },
+    { key: 'y', header: t('col.yCoord'), width: '90px', type: 'number' },
+    { key: 'z', header: t('col.zCoord'), width: '90px', type: 'number' },
+    { key: 'temperature', header: t('col.temperature'), width: '70px', type: 'number' },
+    { key: 'intensityGroup', header: t('col.intensityGroup'), width: '50px', type: 'int' },
+    { key: 'longWeight', header: t('col.longWeight'), width: '80px', type: 'number' },
+    { key: 'forceWeight', header: t('col.forceWeight'), width: '80px', type: 'number' },
+    { key: 'addForceWeight', header: t('col.addForceWeight'), width: '80px', type: 'number' },
+    { key: 'area', header: t('col.area'), width: '70px', type: 'number' },
+  ];
+}
 
-const boundaryColumns: ColumnDef<BoundaryCondition>[] = [
-  { key: 'nodeNumber', header: '節点番号', width: '60px', type: 'int' },
-  { key: 'deltaX', header: 'DX', width: '40px', type: 'int' },
-  { key: 'deltaY', header: 'DY', width: '40px', type: 'int' },
-  { key: 'deltaZ', header: 'DZ', width: '40px', type: 'int' },
-  { key: 'thetaX', header: 'RX', width: '40px', type: 'int' },
-  { key: 'thetaY', header: 'RY', width: '40px', type: 'int' },
-  { key: 'thetaZ', header: 'RZ', width: '40px', type: 'int' },
-];
+function getBoundaryColumns(): ColumnDef<BoundaryCondition>[] {
+  return [
+    { key: 'nodeNumber', header: t('col.nodeNumber'), width: '60px', type: 'int' },
+    { key: 'deltaX', header: t('col.deltaX'), width: '40px', type: 'int' },
+    { key: 'deltaY', header: t('col.deltaY'), width: '40px', type: 'int' },
+    { key: 'deltaZ', header: t('col.deltaZ'), width: '40px', type: 'int' },
+    { key: 'thetaX', header: t('col.thetaX'), width: '40px', type: 'int' },
+    { key: 'thetaY', header: t('col.thetaY'), width: '40px', type: 'int' },
+    { key: 'thetaZ', header: t('col.thetaZ'), width: '40px', type: 'int' },
+  ];
+}
 
-const materialColumns: ColumnDef<Material>[] = [
-  { key: 'number', header: '番号', width: '40px', type: 'int' },
-  { key: 'young', header: 'ヤング係数', width: '100px', type: 'number' },
-  { key: 'shear', header: 'せん断', width: '100px', type: 'number' },
-  { key: 'expansion', header: '熱膨張', width: '80px', type: 'number' },
-  { key: 'poisson', header: 'ポアソン比', width: '80px', type: 'number' },
-  { key: 'unitLoad', header: '単位荷重', width: '80px', type: 'number' },
-  { key: 'name', header: '材料名', width: '100px', type: 'text' },
-];
+function getMaterialColumns(): ColumnDef<Material>[] {
+  return [
+    { key: 'number', header: t('col.number'), width: '40px', type: 'int' },
+    { key: 'young', header: t('col.young'), width: '100px', type: 'number' },
+    { key: 'shear', header: t('col.shear'), width: '100px', type: 'number' },
+    { key: 'expansion', header: t('col.expansion'), width: '80px', type: 'number' },
+    { key: 'poisson', header: t('col.poisson'), width: '80px', type: 'number' },
+    { key: 'unitLoad', header: t('col.unitLoad'), width: '80px', type: 'number' },
+    { key: 'name', header: t('col.materialName'), width: '100px', type: 'text' },
+  ];
+}
 
-const sectionColumns: ColumnDef<Section>[] = [
-  { key: 'number', header: '番号', width: '40px', type: 'int' },
-  { key: 'materialNumber', header: '材料', width: '40px', type: 'int' },
-  { key: 'type', header: '種別', width: '40px', type: 'int' },
-  { key: 'shape', header: '形状', width: '40px', type: 'int' },
-  { key: 'p1_A', header: 'A', width: '90px', type: 'number' },
-  { key: 'p2_Ix', header: 'Ix', width: '90px', type: 'number' },
-  { key: 'p3_Iy', header: 'Iy', width: '90px', type: 'number' },
-  { key: 'p4_Iz', header: 'Iz', width: '90px', type: 'number' },
-  { key: 'ky', header: 'Ky', width: '50px', type: 'number' },
-  { key: 'kz', header: 'Kz', width: '50px', type: 'number' },
-  { key: 'comment', header: 'コメント', width: '100px', type: 'text' },
-];
+function getSectionColumns(): ColumnDef<Section>[] {
+  return [
+    { key: 'number', header: t('col.number'), width: '40px', type: 'int' },
+    { key: 'materialNumber', header: t('col.material'), width: '40px', type: 'int' },
+    { key: 'type', header: t('col.type'), width: '40px', type: 'int' },
+    { key: 'shape', header: t('col.shape'), width: '40px', type: 'int' },
+    { key: 'p1_A', header: 'A', width: '90px', type: 'number' },
+    { key: 'p2_Ix', header: 'Ix', width: '90px', type: 'number' },
+    { key: 'p3_Iy', header: 'Iy', width: '90px', type: 'number' },
+    { key: 'p4_Iz', header: 'Iz', width: '90px', type: 'number' },
+    { key: 'ky', header: 'Ky', width: '50px', type: 'number' },
+    { key: 'kz', header: 'Kz', width: '50px', type: 'number' },
+    { key: 'comment', header: t('col.comment'), width: '100px', type: 'text' },
+  ];
+}
 
-const springColumns: ColumnDef<Spring>[] = [
-  { key: 'number', header: '番号', width: '40px', type: 'int' },
-  { key: 'method', header: '方式', width: '40px', type: 'int' },
-  { key: 'kTheta', header: 'K_Theta', width: '100px', type: 'number' },
-];
+function getSpringColumns(): ColumnDef<Spring>[] {
+  return [
+    { key: 'number', header: t('col.number'), width: '40px', type: 'int' },
+    { key: 'method', header: t('col.method'), width: '40px', type: 'int' },
+    { key: 'kTheta', header: 'K_Theta', width: '100px', type: 'number' },
+  ];
+}
 
-const memberColumns: ColumnDef<Member>[] = [
-  { key: 'number', header: '部材番号', width: '50px', type: 'int' },
-  { key: 'iNodeNumber', header: 'I端', width: '50px', type: 'int' },
-  { key: 'jNodeNumber', header: 'J端', width: '50px', type: 'int' },
-  { key: 'ixSpring', header: 'Ix', width: '40px', type: 'int' },
-  { key: 'iySpring', header: 'Iy', width: '40px', type: 'int' },
-  { key: 'izSpring', header: 'Iz', width: '40px', type: 'int' },
-  { key: 'jxSpring', header: 'Jx', width: '40px', type: 'int' },
-  { key: 'jySpring', header: 'Jy', width: '40px', type: 'int' },
-  { key: 'jzSpring', header: 'Jz', width: '40px', type: 'int' },
-  { key: 'sectionNumber', header: '断面', width: '50px', type: 'int' },
-  { key: 'p1', header: 'P1', width: '50px', type: 'number' },
-  { key: 'p2', header: 'P2', width: '50px', type: 'number' },
-  { key: 'p3', header: 'P3', width: '50px', type: 'number' },
-];
+function getMemberColumns(): ColumnDef<Member>[] {
+  return [
+    { key: 'number', header: t('col.memberNumber'), width: '50px', type: 'int' },
+    { key: 'iNodeNumber', header: t('col.iNode'), width: '50px', type: 'int' },
+    { key: 'jNodeNumber', header: t('col.jNode'), width: '50px', type: 'int' },
+    { key: 'ixSpring', header: 'Ix', width: '40px', type: 'int' },
+    { key: 'iySpring', header: 'Iy', width: '40px', type: 'int' },
+    { key: 'izSpring', header: 'Iz', width: '40px', type: 'int' },
+    { key: 'jxSpring', header: 'Jx', width: '40px', type: 'int' },
+    { key: 'jySpring', header: 'Jy', width: '40px', type: 'int' },
+    { key: 'jzSpring', header: 'Jz', width: '40px', type: 'int' },
+    { key: 'sectionNumber', header: t('col.section'), width: '50px', type: 'int' },
+    { key: 'p1', header: 'P1', width: '50px', type: 'number' },
+    { key: 'p2', header: 'P2', width: '50px', type: 'number' },
+    { key: 'p3', header: 'P3', width: '50px', type: 'number' },
+  ];
+}
 
-const wallColumns: ColumnDef<Wall>[] = [
-  { key: 'number', header: '壁番号', width: '50px', type: 'int' },
-  { key: 'leftBottomNode', header: '左下', width: '50px', type: 'int' },
-  { key: 'rightBottomNode', header: '右下', width: '50px', type: 'int' },
-  { key: 'leftTopNode', header: '左上', width: '50px', type: 'int' },
-  { key: 'rightTopNode', header: '右上', width: '50px', type: 'int' },
-  { key: 'materialNumber', header: '材料', width: '40px', type: 'int' },
-  { key: 'method', header: '方式', width: '40px', type: 'int' },
-  { key: 'p1', header: 'P1', width: '60px', type: 'number' },
-  { key: 'p2', header: 'P2', width: '60px', type: 'number' },
-  { key: 'p3', header: 'P3', width: '60px', type: 'number' },
-  { key: 'p4', header: 'P4', width: '60px', type: 'number' },
-];
+function getWallColumns(): ColumnDef<Wall>[] {
+  return [
+    { key: 'number', header: t('col.wallNumber'), width: '50px', type: 'int' },
+    { key: 'leftBottomNode', header: t('col.leftBottom'), width: '50px', type: 'int' },
+    { key: 'rightBottomNode', header: t('col.rightBottom'), width: '50px', type: 'int' },
+    { key: 'leftTopNode', header: t('col.leftTop'), width: '50px', type: 'int' },
+    { key: 'rightTopNode', header: t('col.rightTop'), width: '50px', type: 'int' },
+    { key: 'materialNumber', header: t('col.material'), width: '40px', type: 'int' },
+    { key: 'method', header: t('col.method'), width: '40px', type: 'int' },
+    { key: 'p1', header: 'P1', width: '60px', type: 'number' },
+    { key: 'p2', header: 'P2', width: '60px', type: 'number' },
+    { key: 'p3', header: 'P3', width: '60px', type: 'number' },
+    { key: 'p4', header: 'P4', width: '60px', type: 'number' },
+  ];
+}
 
-const nodeLoadColumns: ColumnDef<NodeLoadRow>[] = [
-  { key: 'nodeNumber', header: '節点番号', width: '60px', type: 'int', readOnly: true },
-  { key: 'p1', header: 'P1(kN)', width: '80px', type: 'number' },
-  { key: 'p2', header: 'P2(kN)', width: '80px', type: 'number' },
-  { key: 'p3', header: 'P3(kN)', width: '80px', type: 'number' },
-  { key: 'm1', header: 'M1', width: '80px', type: 'number' },
-  { key: 'm2', header: 'M2', width: '80px', type: 'number' },
-  { key: 'm3', header: 'M3', width: '80px', type: 'number' },
-];
+function getNodeLoadColumns(): ColumnDef<NodeLoadRow>[] {
+  return [
+    { key: 'nodeNumber', header: t('col.nodeNumber'), width: '60px', type: 'int', readOnly: true },
+    { key: 'p1', header: t('col.p1kN'), width: '80px', type: 'number' },
+    { key: 'p2', header: t('col.p2kN'), width: '80px', type: 'number' },
+    { key: 'p3', header: t('col.p3kN'), width: '80px', type: 'number' },
+    { key: 'm1', header: 'M1', width: '80px', type: 'number' },
+    { key: 'm2', header: 'M2', width: '80px', type: 'number' },
+    { key: 'm3', header: 'M3', width: '80px', type: 'number' },
+  ];
+}
 
-const cmqLoadColumns: ColumnDef<CMQLoadRow>[] = [
-  { key: 'memberNumber', header: '部材番号', width: '60px', type: 'int', readOnly: true },
-  { key: 'moy', header: 'Moy', width: '70px', type: 'number' },
-  { key: 'moz', header: 'Moz', width: '70px', type: 'number' },
-  { key: 'iMy', header: 'iMy', width: '70px', type: 'number' },
-  { key: 'iMz', header: 'iMz', width: '70px', type: 'number' },
-  { key: 'iQx', header: 'iQx', width: '70px', type: 'number' },
-  { key: 'iQy', header: 'iQy', width: '70px', type: 'number' },
-  { key: 'iQz', header: 'iQz', width: '70px', type: 'number' },
-  { key: 'jMy', header: 'jMy', width: '70px', type: 'number' },
-  { key: 'jMz', header: 'jMz', width: '70px', type: 'number' },
-  { key: 'jQx', header: 'jQx', width: '70px', type: 'number' },
-  { key: 'jQy', header: 'jQy', width: '70px', type: 'number' },
-  { key: 'jQz', header: 'jQz', width: '70px', type: 'number' },
-];
+function getCMQLoadColumns(): ColumnDef<CMQLoadRow>[] {
+  return [
+    { key: 'memberNumber', header: t('col.memberNumber'), width: '60px', type: 'int', readOnly: true },
+    { key: 'moy', header: 'Moy', width: '70px', type: 'number' },
+    { key: 'moz', header: 'Moz', width: '70px', type: 'number' },
+    { key: 'iMy', header: 'iMy', width: '70px', type: 'number' },
+    { key: 'iMz', header: 'iMz', width: '70px', type: 'number' },
+    { key: 'iQx', header: 'iQx', width: '70px', type: 'number' },
+    { key: 'iQy', header: 'iQy', width: '70px', type: 'number' },
+    { key: 'iQz', header: 'iQz', width: '70px', type: 'number' },
+    { key: 'jMy', header: 'jMy', width: '70px', type: 'number' },
+    { key: 'jMz', header: 'jMz', width: '70px', type: 'number' },
+    { key: 'jQx', header: 'jQx', width: '70px', type: 'number' },
+    { key: 'jQy', header: 'jQy', width: '70px', type: 'number' },
+    { key: 'jQz', header: 'jQz', width: '70px', type: 'number' },
+  ];
+}
 
-const memberLoadColumns: ColumnDef<MemberLoadRow>[] = [
-  { key: 'memberNumber', header: '部材番号', width: '60px', type: 'int', readOnly: true },
-  { key: 'lengthMethod', header: '長さ方式', width: '60px', type: 'int' },
-  { key: 'type', header: '種別', width: '50px', type: 'int' },
-  { key: 'direction', header: '方向', width: '50px', type: 'int' },
-  { key: 'scale', header: '倍率', width: '60px', type: 'number' },
-  { key: 'loadCode', header: 'コード', width: '60px', type: 'text' },
-  { key: 'unitLoad', header: '単位荷重', width: '70px', type: 'number' },
-  { key: 'p1', header: 'P1', width: '80px', type: 'number' },
-  { key: 'p2', header: 'P2', width: '80px', type: 'number' },
-  { key: 'p3', header: 'P3', width: '80px', type: 'number' },
-];
+function getMemberLoadColumns(): ColumnDef<MemberLoadRow>[] {
+  return [
+    { key: 'memberNumber', header: t('col.memberNumber'), width: '60px', type: 'int', readOnly: true },
+    { key: 'lengthMethod', header: t('col.lengthMethod'), width: '60px', type: 'int' },
+    { key: 'type', header: t('col.type'), width: '50px', type: 'int' },
+    { key: 'direction', header: t('col.direction'), width: '50px', type: 'int' },
+    { key: 'scale', header: t('col.scale'), width: '60px', type: 'number' },
+    { key: 'loadCode', header: t('col.code'), width: '60px', type: 'text' },
+    { key: 'unitLoad', header: t('col.unitLoad'), width: '70px', type: 'number' },
+    { key: 'p1', header: 'P1', width: '80px', type: 'number' },
+    { key: 'p2', header: 'P2', width: '80px', type: 'number' },
+    { key: 'p3', header: 'P3', width: '80px', type: 'number' },
+  ];
+}
 
 // ===== 起動 =====
 document.addEventListener('DOMContentLoaded', init);

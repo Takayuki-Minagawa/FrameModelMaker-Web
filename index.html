@@ -3,72 +3,82 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FrameModelMaker Web</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>FrameModelMaker-Web v1.0.0</title>
 </head>
 <body>
   <!-- メニューバー -->
   <div id="menu-bar">
-    <div class="menu-item">
-      ファイル
+    <div class="menu-item" data-i18n="menu.file">
       <div class="menu-dropdown">
-        <div id="menu-new">新規作成</div>
-        <div id="menu-open">開く (.dat)</div>
-        <div id="menu-save">保存 (.dat)</div>
+        <div id="menu-new" data-i18n="menu.new"></div>
+        <div id="menu-open" data-i18n="menu.open"></div>
+        <div id="menu-save" data-i18n="menu.save"></div>
         <div class="separator"></div>
-        <div id="menu-sample">サンプル読込</div>
+        <div id="menu-sample" data-i18n="menu.sample"></div>
       </div>
     </div>
-    <div class="menu-item">
-      表示
+    <div class="menu-item" data-i18n="menu.view">
       <div class="menu-dropdown">
-        <div id="menu-show-node-num">節点番号 表示/非表示</div>
-        <div id="menu-show-member-num">部材番号 表示/非表示</div>
+        <div id="menu-show-node-num" data-i18n="menu.showNodeNum"></div>
+        <div id="menu-show-member-num" data-i18n="menu.showMemberNum"></div>
       </div>
     </div>
-    <div class="menu-item">
-      編集
+    <div class="menu-item" data-i18n="menu.edit">
       <div class="menu-dropdown">
-        <div id="menu-sort">ソート</div>
-        <div id="menu-renumber">番号再割当</div>
-        <div id="menu-merge">重複ノード統合</div>
+        <div id="menu-sort" data-i18n="menu.sort"></div>
+        <div id="menu-renumber" data-i18n="menu.renumber"></div>
+        <div id="menu-merge" data-i18n="menu.merge"></div>
       </div>
     </div>
-    <div class="menu-item">
-      荷重定義
+    <div class="menu-item" data-i18n="menu.loadcase">
       <div class="menu-dropdown">
-        <div id="menu-add-loadcase">荷重定義 追加</div>
-        <div id="menu-remove-loadcase">荷重定義 削除</div>
+        <div id="menu-add-loadcase" data-i18n="menu.addLoadcase"></div>
+        <div id="menu-remove-loadcase" data-i18n="menu.removeLoadcase"></div>
         <div class="separator"></div>
         <div style="padding:4px 16px;">
           <select id="load-case-selector">
-            <option value="0">荷重定義 1</option>
+            <option value="0">Load Case 1</option>
           </select>
         </div>
       </div>
+    </div>
+
+    <!-- 右端ボタン群 -->
+    <div id="menu-right">
+      <button id="btn-theme" title="Theme"></button>
+      <button id="btn-lang" title="Language"></button>
+      <button id="btn-help" title="Help">?</button>
     </div>
   </div>
 
   <!-- メインコンテンツ -->
   <div id="main-content">
-    <!-- 3Dビュー -->
     <div id="viewer-panel"></div>
-
-    <!-- リサイズハンドル -->
     <div id="resize-handle"></div>
-
-    <!-- データパネル -->
     <div id="data-panel">
       <div id="tab-bar"></div>
       <div id="grid-toolbar">
-        <span style="font-size:12px;color:#666;">データ編集</span>
+        <span id="toolbar-label" data-i18n="toolbar.dataEdit"></span>
       </div>
       <div id="grid-container"></div>
     </div>
   </div>
 
+  <!-- ヘルプダイアログ -->
+  <div id="help-overlay" class="hidden">
+    <div id="help-dialog">
+      <div id="help-header">
+        <span id="help-title"></span>
+        <button id="help-close">&times;</button>
+      </div>
+      <div id="help-body"></div>
+    </div>
+  </div>
+
   <!-- ステータスバー -->
   <div id="status-bar">
-    <span id="status-text">起動中...</span>
+    <span id="status-text"></span>
   </div>
 
   <script type="module" src="/src/main.ts"></script>
