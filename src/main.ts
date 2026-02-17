@@ -1,7 +1,7 @@
 import './styles/main.css';
 import { FrameDocument } from './models/FrameDocument';
 import { parseFrameJson, writeFrameJson } from './io/FrameJson';
-import { ModelViewer } from './viewer/ModelViewer';
+import { ModelViewer, ViewerSelection } from './viewer/ModelViewer';
 import { DataGrid, ColumnDef } from './ui/DataGrid';
 import gridColumns from './data/gridColumns.json';
 import { Node } from './models/Node';
@@ -33,6 +33,8 @@ let viewer: ModelViewer;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let currentGrid: DataGrid<any> | null = null;
 let activeTab = 'nodes';
+let currentSelection: ViewerSelection = { kind: 'none' };
+interface SelectionField { label: string; value: string | number; }
 
 // ===== タブ定義 =====
 const tabDefs = [
@@ -54,6 +56,7 @@ function init(): void {
   setupTabs();
   setupToolbar();
   setupViewer();
+  setupSelectionInfoPanel();
   setupResizer();
   setupThemeToggle();
   setupLangToggle();
@@ -103,16 +106,19 @@ function applyI18n(): void {
   if (btnAdd) btnAdd.textContent = '+ ' + t('toolbar.addRow');
   const btnDel = document.getElementById('btn-delete-row');
   if (btnDel) btnDel.textContent = '- ' + t('toolbar.deleteRow');
+  const btnSelClose = document.getElementById('selection-info-close');
+  if (btnSelClose) btnSelClose.setAttribute('title', t('selection.close'));
 
   // グリッドを更新（列ヘッダーの言語を反映）
   refreshGrid();
+  renderSelectionInfo(currentSelection);
 }
 
 // ===== メニュー =====
 function setupMenu(): void {
   // ファイルメニュー
   on('menu-new', () => {
-    doc.init(); viewer.updateModel(); refreshGrid();
+    doc.init(); resetViewerSelection(); viewer.updateModel(); refreshGrid();
     updateStatus(t('status.newCreated'));
   });
   on('menu-open', () => openFile());
@@ -360,6 +366,7 @@ function openFile(): void {
     try {
       const text = await file.text();
       parseFrameJson(text, doc);
+      resetViewerSelection();
       viewer.updateModel();
       refreshGrid();
       updateLoadCaseSelector();
@@ -370,6 +377,7 @@ function openFile(): void {
       } catch {
         doc.init();
       }
+      resetViewerSelection();
       viewer.updateModel();
       refreshGrid();
       updateLoadCaseSelector();
@@ -398,6 +406,7 @@ async function loadSample(): Promise<void> {
     const resp = await fetch('./samples/FrameModel_Sample.json');
     const text = await resp.text();
     parseFrameJson(text, doc);
+    resetViewerSelection();
     viewer.updateModel();
     refreshGrid();
     updateLoadCaseSelector();
@@ -408,6 +417,7 @@ async function loadSample(): Promise<void> {
     } catch {
       doc.init();
     }
+    resetViewerSelection();
     viewer.updateModel();
     refreshGrid();
     updateLoadCaseSelector();
@@ -420,6 +430,116 @@ async function loadSample(): Promise<void> {
 function setupViewer(): void {
   const container = document.getElementById('viewer-panel')!;
   viewer = new ModelViewer(container, doc);
+  viewer.setOnSelectionChanged((selection) => {
+    currentSelection = selection;
+    renderSelectionInfo(selection);
+  });
+}
+
+function setupSelectionInfoPanel(): void {
+  const btnClose = document.getElementById('selection-info-close');
+  if (!btnClose) return;
+  btnClose.addEventListener('click', () => {
+    resetViewerSelection();
+  });
+}
+
+function resetViewerSelection(): void {
+  const hadSelection = currentSelection.kind !== 'none';
+  currentSelection = { kind: 'none' };
+  if (hadSelection) {
+    viewer.clearSelection(false);
+  }
+  renderSelectionInfo(currentSelection);
+}
+
+function renderSelectionInfo(selection: ViewerSelection): void {
+  const panel = document.getElementById('selection-info-panel');
+  const titleEl = document.getElementById('selection-info-title');
+  const bodyEl = document.getElementById('selection-info-body');
+  if (!panel || !titleEl || !bodyEl) return;
+
+  if (selection.kind === 'none') {
+    panel.classList.add('hidden');
+    bodyEl.innerHTML = '';
+    return;
+  }
+
+  if (selection.kind === 'node') {
+    const node = doc.findNodeByNumber(selection.nodeNumber);
+    if (!node) {
+      panel.classList.add('hidden');
+      return;
+    }
+    showSelectionInfo('selection.title.node', [
+      { label: t('col.nodeNumber'), value: node.number },
+      { label: t('col.xCoord'), value: node.x },
+      { label: t('col.yCoord'), value: node.y },
+      { label: t('col.zCoord'), value: node.z },
+      { label: t('col.temperature'), value: node.temperature },
+      { label: t('col.intensityGroup'), value: node.intensityGroup },
+      { label: t('col.longWeight'), value: node.longWeight },
+      { label: t('col.forceWeight'), value: node.forceWeight },
+      { label: t('col.addForceWeight'), value: node.addForceWeight },
+      { label: t('col.area'), value: node.area },
+    ]);
+    return;
+  }
+
+  const member = doc.members.find(m => m.number === selection.memberNumber);
+  if (!member) {
+    panel.classList.add('hidden');
+    return;
+  }
+  showSelectionInfo('selection.title.member', [
+    { label: t('col.memberNumber'), value: member.number },
+    { label: t('col.iNode'), value: member.iNodeNumber },
+    { label: t('col.jNode'), value: member.jNodeNumber },
+    { label: t('col.section'), value: member.sectionNumber },
+    { label: 'Ix', value: member.ixSpring },
+    { label: 'Iy', value: member.iySpring },
+    { label: 'Iz', value: member.izSpring },
+    { label: 'Jx', value: member.jxSpring },
+    { label: 'Jy', value: member.jySpring },
+    { label: 'Jz', value: member.jzSpring },
+    { label: 'P1', value: member.p1 },
+    { label: 'P2', value: member.p2 },
+    { label: 'P3', value: member.p3 },
+  ]);
+}
+
+function showSelectionInfo(titleKey: string, fields: SelectionField[]): void {
+  const panel = document.getElementById('selection-info-panel');
+  const titleEl = document.getElementById('selection-info-title');
+  const bodyEl = document.getElementById('selection-info-body');
+  if (!panel || !titleEl || !bodyEl) return;
+
+  titleEl.textContent = t(titleKey);
+  bodyEl.innerHTML = '';
+
+  const table = document.createElement('table');
+  table.className = 'selection-info-table';
+
+  for (const field of fields) {
+    const tr = document.createElement('tr');
+    const tdLabel = document.createElement('td');
+    tdLabel.textContent = field.label;
+    const tdValue = document.createElement('td');
+    tdValue.textContent = formatSelectionValue(field.value);
+    tr.appendChild(tdLabel);
+    tr.appendChild(tdValue);
+    table.appendChild(tr);
+  }
+
+  bodyEl.appendChild(table);
+  panel.classList.remove('hidden');
+}
+
+function formatSelectionValue(value: string | number): string {
+  if (typeof value !== 'number') return value;
+  if (!Number.isFinite(value)) return '-';
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(3).replace(/\.?0+$/, '');
 }
 
 // ===== リサイズ =====
@@ -481,6 +601,7 @@ function refreshGrid(): void {
 
   const onChanged = () => {
     viewer.updateModel();
+    renderSelectionInfo(currentSelection);
   };
 
   switch (activeTab) {
@@ -540,6 +661,7 @@ function refreshGrid(): void {
   if (currentGrid) {
     currentGrid.setOnDataChanged(onChanged);
   }
+  renderSelectionInfo(currentSelection);
 }
 
 // ===== 荷重定義セレクタ =====

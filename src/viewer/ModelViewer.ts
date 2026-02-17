@@ -35,6 +35,9 @@ const NODE_COLOR_DEFAULT: [number, number, number] = [0, 0.3, 0.8];
 const NODE_COLOR_SELECTED: [number, number, number] = [1, 0, 0];
 const MEMBER_COLOR_DEFAULT: [number, number, number] = [0, 0.3, 0.8];
 const MEMBER_COLOR_SELECTED: [number, number, number] = [1, 0, 0];
+const CLICK_DRAG_THRESHOLD_PX = 4;
+const NODE_PICK_RADIUS_PX = 10;
+const MEMBER_PICK_RADIUS_PX = 8;
 
 const BOUNDARY_SYMBOL_SIZE = 12;
 const BOUNDARY_SYMBOL_COLOR = 0x00aa00;
@@ -45,6 +48,11 @@ const WALL_FILL_OPACITY = 0.3;
 const WALL_EDGE_COLOR = 0x4477aa;
 
 const LABEL_FONT = '11px sans-serif';
+
+export type ViewerSelection =
+  | { kind: 'none' }
+  | { kind: 'node'; nodeNumber: number }
+  | { kind: 'member'; memberNumber: number };
 
 export class ModelViewer {
   private scene: THREE.Scene;
@@ -71,6 +79,10 @@ export class ModelViewer {
   private labelCtx: CanvasRenderingContext2D;
   private onResizeBound: () => void;
   private animationId: number = 0;
+  private selectedNodeNumber: number | null = null;
+  private selectedMemberNumber: number | null = null;
+  private pointerDownPos: { x: number; y: number } | null = null;
+  private selectionChangedHandler: ((selection: ViewerSelection) => void) | null = null;
 
   constructor(container: HTMLElement, doc: FrameDocument) {
     this.container = container;
@@ -130,6 +142,8 @@ export class ModelViewer {
     // リサイズ対応
     this.onResizeBound = () => this.onResize();
     window.addEventListener('resize', this.onResizeBound);
+    this.renderer.domElement.addEventListener('pointerdown', this.onPointerDown);
+    window.addEventListener('pointerup', this.onPointerUp);
 
     // アニメーションループ
     this.animate();
@@ -186,12 +200,14 @@ export class ModelViewer {
   }
 
   /** モデルを再描画 */
-  updateModel(): void {
+  updateModel(fitToView: boolean = true): void {
     this.clearGroups();
     this.drawNodes();
     this.drawMembers();
     this.drawWalls();
-    this.fitToView();
+    if (fitToView) {
+      this.fitToView();
+    }
   }
 
   private clearGroups(): void {
@@ -222,7 +238,7 @@ export class ModelViewer {
 
     for (const node of this.doc.nodes) {
       positions.push(node.x, node.y, node.z);
-      if (node.selected) {
+      if (node.selected || this.selectedNodeNumber === node.number) {
         colors.push(...NODE_COLOR_SELECTED);
       } else {
         colors.push(...NODE_COLOR_DEFAULT);
@@ -283,7 +299,9 @@ export class ModelViewer {
       positions.push(iNode.x, iNode.y, iNode.z);
       positions.push(jNode.x, jNode.y, jNode.z);
 
-      const color = mem.selected ? MEMBER_COLOR_SELECTED : MEMBER_COLOR_DEFAULT;
+      const color = (mem.selected || this.selectedMemberNumber === mem.number)
+        ? MEMBER_COLOR_SELECTED
+        : MEMBER_COLOR_DEFAULT;
       colors.push(...color, ...color);
     }
 
@@ -397,6 +415,158 @@ export class ModelViewer {
     }
   }
 
+  setOnSelectionChanged(handler: ((selection: ViewerSelection) => void) | null): void {
+    this.selectionChangedHandler = handler;
+  }
+
+  clearSelection(notify: boolean = true): void {
+    this.setSelection({ kind: 'none' }, notify);
+  }
+
+  private onPointerDown = (e: PointerEvent): void => {
+    if (e.button !== 0) return;
+    this.pointerDownPos = { x: e.clientX, y: e.clientY };
+  };
+
+  private onPointerUp = (e: PointerEvent): void => {
+    if (e.button !== 0 || !this.pointerDownPos) return;
+
+    const dx = e.clientX - this.pointerDownPos.x;
+    const dy = e.clientY - this.pointerDownPos.y;
+    this.pointerDownPos = null;
+
+    if (dx * dx + dy * dy > CLICK_DRAG_THRESHOLD_PX * CLICK_DRAG_THRESHOLD_PX) return;
+    this.handleClick(e.clientX, e.clientY);
+  };
+
+  private handleClick(clientX: number, clientY: number): void {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+
+    const nodeHit = this.pickNodeAtScreen(x, y);
+    const memberHit = this.pickMemberAtScreen(x, y);
+    if (nodeHit && memberHit) {
+      const nodeScore = nodeHit.distanceSq / (NODE_PICK_RADIUS_PX * NODE_PICK_RADIUS_PX);
+      const memberScore = memberHit.distanceSq / (MEMBER_PICK_RADIUS_PX * MEMBER_PICK_RADIUS_PX);
+      if (nodeScore <= memberScore) {
+        this.setSelection({ kind: 'node', nodeNumber: nodeHit.nodeNumber });
+      } else {
+        this.setSelection({ kind: 'member', memberNumber: memberHit.memberNumber });
+      }
+      return;
+    }
+
+    if (nodeHit) {
+      this.setSelection({ kind: 'node', nodeNumber: nodeHit.nodeNumber });
+      return;
+    }
+
+    if (memberHit) {
+      this.setSelection({ kind: 'member', memberNumber: memberHit.memberNumber });
+      return;
+    }
+
+    this.clearSelection();
+  }
+
+  private pickNodeAtScreen(x: number, y: number): { nodeNumber: number; distanceSq: number } | null {
+    const tempVec = new THREE.Vector3();
+    const worldPos = new THREE.Vector3();
+    let best: { nodeNumber: number; distanceSq: number } | null = null;
+    const radiusSq = NODE_PICK_RADIUS_PX * NODE_PICK_RADIUS_PX;
+
+    for (const node of this.doc.nodes) {
+      worldPos.set(node.x, node.y, node.z);
+      const screen = this.projectToScreen(worldPos, tempVec);
+      if (!screen) continue;
+
+      const dx = screen.x - x;
+      const dy = screen.y - y;
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq > radiusSq) continue;
+      if (!best || distanceSq < best.distanceSq) {
+        best = { nodeNumber: node.number, distanceSq };
+      }
+    }
+
+    return best;
+  }
+
+  private pickMemberAtScreen(x: number, y: number): { memberNumber: number; distanceSq: number } | null {
+    const nodeMap = new Map(this.doc.nodes.map(node => [node.number, node] as const));
+    const tempVec = new THREE.Vector3();
+    const iPos = new THREE.Vector3();
+    const jPos = new THREE.Vector3();
+    let best: { memberNumber: number; distanceSq: number } | null = null;
+    const radiusSq = MEMBER_PICK_RADIUS_PX * MEMBER_PICK_RADIUS_PX;
+
+    for (const member of this.doc.members) {
+      const iNode = nodeMap.get(member.iNodeNumber);
+      const jNode = nodeMap.get(member.jNodeNumber);
+      if (!iNode || !jNode) continue;
+
+      iPos.set(iNode.x, iNode.y, iNode.z);
+      jPos.set(jNode.x, jNode.y, jNode.z);
+      const a = this.projectToScreen(iPos, tempVec);
+      const b = this.projectToScreen(jPos, tempVec);
+      if (!a || !b) continue;
+
+      const distanceSq = this.pointToSegmentDistanceSq(x, y, a.x, a.y, b.x, b.y);
+      if (distanceSq > radiusSq) continue;
+      if (!best || distanceSq < best.distanceSq) {
+        best = { memberNumber: member.number, distanceSq };
+      }
+    }
+
+    return best;
+  }
+
+  private pointToSegmentDistanceSq(
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number
+  ): number {
+    const abx = bx - ax;
+    const aby = by - ay;
+    const apx = px - ax;
+    const apy = py - ay;
+    const lenSq = abx * abx + aby * aby;
+    if (lenSq <= 1e-8) {
+      const dx = px - ax;
+      const dy = py - ay;
+      return dx * dx + dy * dy;
+    }
+
+    const t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / lenSq));
+    const qx = ax + t * abx;
+    const qy = ay + t * aby;
+    const dx = px - qx;
+    const dy = py - qy;
+    return dx * dx + dy * dy;
+  }
+
+  private setSelection(selection: ViewerSelection, notify: boolean = true): void {
+    const nextNode = selection.kind === 'node' ? selection.nodeNumber : null;
+    const nextMember = selection.kind === 'member' ? selection.memberNumber : null;
+    const changed = nextNode !== this.selectedNodeNumber || nextMember !== this.selectedMemberNumber;
+
+    this.selectedNodeNumber = nextNode;
+    this.selectedMemberNumber = nextMember;
+
+    if (changed) {
+      this.updateModel(false);
+    }
+
+    if (notify) {
+      this.selectionChangedHandler?.(selection);
+    }
+  }
+
   /** ダーク/ライトテーマを切替 */
   setTheme(dark: boolean): void {
     this.isDark = dark;
@@ -417,6 +587,8 @@ export class ModelViewer {
   dispose(): void {
     cancelAnimationFrame(this.animationId);
     window.removeEventListener('resize', this.onResizeBound);
+    this.renderer.domElement.removeEventListener('pointerdown', this.onPointerDown);
+    window.removeEventListener('pointerup', this.onPointerUp);
     this.clearGroups();
     this.controls.dispose();
     this.renderer.dispose();

@@ -124,6 +124,9 @@ const messages: Record<Lang, Record<string, string>> = {
     // テーマ
     'theme.light': 'ライト',
     'theme.dark': 'ダーク',
+    'selection.title.node': '節点情報',
+    'selection.title.member': '部材情報',
+    'selection.close': '閉じる',
 
     // ヘルプ
     'help.title': 'FrameModelMaker-Web ヘルプ',
@@ -145,10 +148,14 @@ const messages: Record<Lang, Record<string, string>> = {
 
 <h3>3D ビュー操作</h3>
 <table>
+<tr><td><b>左クリック</b></td><td>節点・部材を選択して情報パネルを表示（空白クリックで解除）</td></tr>
 <tr><td><b>左ドラッグ</b></td><td>モデルを回転</td></tr>
 <tr><td><b>右ドラッグ</b></td><td>視点を平行移動</td></tr>
 <tr><td><b>ホイール</b></td><td>ズームイン / ズームアウト</td></tr>
 </table>
+
+<h3>選択情報パネル</h3>
+<p>3D ビューで節点または部材をクリックすると、ビュー右上に選択要素の詳細情報が表示されます。ヘッダーの × ボタンで閉じることもできます。</p>
 
 <h3>データ編集</h3>
 <p>画面右側のデータパネルで、タブを切り替えてモデルの各要素（節点・部材・断面・材料・荷重など）を直接編集できます。セルの値を変更すると 3D ビューに即座に反映されます。</p>
@@ -295,6 +302,9 @@ const messages: Record<Lang, Record<string, string>> = {
     // Theme
     'theme.light': 'Light',
     'theme.dark': 'Dark',
+    'selection.title.node': 'Node Information',
+    'selection.title.member': 'Member Information',
+    'selection.close': 'Close',
 
     // Help
     'help.title': 'FrameModelMaker-Web Help',
@@ -316,10 +326,14 @@ const messages: Record<Lang, Record<string, string>> = {
 
 <h3>3D View Controls</h3>
 <table>
+<tr><td><b>Left Click</b></td><td>Select a node/member and show its info panel (click empty space to clear)</td></tr>
 <tr><td><b>Left Drag</b></td><td>Rotate the model</td></tr>
 <tr><td><b>Right Drag</b></td><td>Pan the view</td></tr>
 <tr><td><b>Scroll Wheel</b></td><td>Zoom in / out</td></tr>
 </table>
+
+<h3>Selection Info Panel</h3>
+<p>Click a node or member in the 3D view to show detailed information at the upper-right of the viewer. You can also close it with the × button in the panel header.</p>
 
 <h3>Data Editing</h3>
 <p>Use the tabbed data panel on the right to edit model elements (nodes, members, sections, materials, loads, etc.). Changes are reflected in the 3D view immediately.</p>
