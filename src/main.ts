@@ -236,8 +236,6 @@ function setupHelp(): void {
 }
 
 // ===== ツールバー（行追加・削除） =====
-const LOAD_TABS = ['nodeloads', 'cmqloads', 'memberloads'];
-
 function setupToolbar(): void {
   const toolbar = document.getElementById('grid-toolbar')!;
 
@@ -264,7 +262,9 @@ function setupToolbar(): void {
 function updateToolbarVisibility(): void {
   const btnGroup = document.getElementById('toolbar-buttons');
   if (btnGroup) {
-    btnGroup.style.display = LOAD_TABS.includes(activeTab) ? 'none' : 'flex';
+    // 行の追加・削除に対応するタブ（addRow を持つプロバイダ）でのみ表示
+    const canEditRows = !!tabProviders[activeTab]?.addRow;
+    btnGroup.style.display = canEditRows ? 'flex' : 'none';
   }
 }
 
@@ -273,82 +273,17 @@ function nextNumber(items: { number: number }[]): number {
 }
 
 function addRow(): void {
-  switch (activeTab) {
-    case 'nodes': {
-      const n = new Node();
-      n.number = doc.newNodeNumber;
-      doc.nodes.push(n);
-      break;
-    }
-    case 'boundaries': {
-      const bc = new BoundaryCondition();
-      bc.nodeNumber = nextNumber(doc.boundaries.length > 0 ? doc.boundaries.map(b => ({ number: b.nodeNumber })) : []);
-      doc.boundaries.push(bc);
-      break;
-    }
-    case 'materials': {
-      const m = new Material();
-      m.number = nextNumber(doc.materials);
-      doc.materials.push(m);
-      break;
-    }
-    case 'sections': {
-      const s = new Section();
-      s.number = nextNumber(doc.sections);
-      doc.sections.push(s);
-      break;
-    }
-    case 'springs': {
-      const sp = new Spring();
-      sp.number = nextNumber(doc.springs);
-      doc.springs.push(sp);
-      break;
-    }
-    case 'members': {
-      const mem = new Member();
-      mem.number = doc.newMemberNumber;
-      doc.members.push(mem);
-      break;
-    }
-    case 'walls': {
-      const w = new Wall();
-      w.number = nextNumber(doc.walls);
-      doc.walls.push(w);
-      break;
-    }
-    default:
-      return;
-  }
+  const provider = tabProviders[activeTab];
+  if (!provider?.addRow) return;
+  provider.addRow();
   refreshGrid();
   viewer.updateModel();
 }
 
 function deleteRow(): void {
-  switch (activeTab) {
-    case 'nodes':
-      if (doc.nodes.length > 0) doc.nodes.pop();
-      break;
-    case 'boundaries':
-      if (doc.boundaries.length > 0) doc.boundaries.pop();
-      break;
-    case 'materials':
-      if (doc.materials.length > 0) doc.materials.pop();
-      break;
-    case 'sections':
-      if (doc.sections.length > 0) doc.sections.pop();
-      break;
-    case 'springs':
-      if (doc.springs.length > 0) doc.springs.pop();
-      break;
-    case 'members':
-      if (doc.members.length > 0) doc.members.pop();
-      break;
-    case 'walls':
-      if (doc.walls.length > 0) doc.walls.pop();
-      break;
-    default:
-      return;
-  }
+  const provider = tabProviders[activeTab];
+  if (!provider?.deleteRow) return;
+  provider.deleteRow();
   refreshGrid();
   viewer.updateModel();
 }
@@ -604,61 +539,9 @@ function refreshGrid(): void {
     renderSelectionInfo(currentSelection);
   };
 
-  switch (activeTab) {
-    case 'nodes':
-      currentGrid = new DataGrid<Node>(container, getNodeColumns(), doc.nodes);
-      break;
-    case 'boundaries':
-      currentGrid = new DataGrid<BoundaryCondition>(container, getBoundaryColumns(), doc.boundaries);
-      break;
-    case 'materials':
-      currentGrid = new DataGrid<Material>(container, getMaterialColumns(), doc.materials);
-      break;
-    case 'sections':
-      currentGrid = new DataGrid<Section>(container, getSectionColumns(), doc.sections);
-      break;
-    case 'springs':
-      currentGrid = new DataGrid<Spring>(container, getSpringColumns(), doc.springs);
-      break;
-    case 'members':
-      currentGrid = new DataGrid<Member>(container, getMemberColumns(), doc.members);
-      break;
-    case 'walls':
-      currentGrid = new DataGrid<Wall>(container, getWallColumns(), doc.walls);
-      break;
-    case 'nodeloads': {
-      const loads = doc.nodes
-        .filter(n => n.loads.length > doc.loadCaseIndex)
-        .map(n => {
-          const load = n.getLoad(doc.loadCaseIndex);
-          return { nodeNumber: n.number, p1: load.p1, p2: load.p2, p3: load.p3, m1: load.m1, m2: load.m2, m3: load.m3 };
-        });
-      currentGrid = new DataGrid(container, getNodeLoadColumns(), loads);
-      break;
-    }
-    case 'cmqloads': {
-      const loads = doc.members
-        .filter(m => m.cmqLoads.length > doc.loadCaseIndex)
-        .map(m => {
-          const load = m.getCMQLoad(doc.loadCaseIndex);
-          return { memberNumber: m.number, moy: load.moy, moz: load.moz, iMy: load.iMy, iMz: load.iMz, iQx: load.iQx, iQy: load.iQy, iQz: load.iQz, jMy: load.jMy, jMz: load.jMz, jQx: load.jQx, jQy: load.jQy, jQz: load.jQz };
-        });
-      currentGrid = new DataGrid(container, getCMQLoadColumns(), loads);
-      break;
-    }
-    case 'memberloads': {
-      const loads = doc.members
-        .filter(m => m.memberLoads.length > doc.loadCaseIndex)
-        .map(m => {
-          const load = m.getMemberLoad(doc.loadCaseIndex);
-          return { memberNumber: m.number, lengthMethod: load.lengthMethod, type: load.type, direction: load.direction, scale: load.scale, loadCode: load.loadCode, unitLoad: load.unitLoad, p1: load.p1, p2: load.p2, p3: load.p3 };
-        });
-      currentGrid = new DataGrid(container, getMemberLoadColumns(), loads);
-      break;
-    }
-  }
-
-  if (currentGrid) {
+  const provider = tabProviders[activeTab];
+  if (provider) {
+    currentGrid = provider.createGrid(container);
     currentGrid.setOnDataChanged(onChanged);
   }
   renderSelectionInfo(currentSelection);
@@ -703,45 +586,106 @@ function getColumnsFromConfig<T extends object>(tabId: string): ColumnDef<T>[] {
   }));
 }
 
-function getNodeColumns(): ColumnDef<Node>[] {
-  return getColumnsFromConfig<Node>('nodes');
+// ===== タブ・データプロバイダ =====
+// 各タブの「グリッド生成」「行追加」「行削除」を一元定義する。
+// addRow/deleteRow を持つタブのみツールバー（行編集ボタン）を表示する。
+interface TabDataProvider {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  createGrid(container: HTMLElement): DataGrid<any>;
+  addRow?(): void;
+  deleteRow?(): void;
 }
 
-function getBoundaryColumns(): ColumnDef<BoundaryCondition>[] {
-  return getColumnsFromConfig<BoundaryCondition>('boundaries');
+// 番号付きエンティティ（配列に push/pop するだけのタブ）の共通プロバイダ。
+function entityProvider<T extends object>(
+  tabId: string,
+  getList: () => T[],
+  create: (list: T[]) => T,
+): TabDataProvider {
+  return {
+    createGrid: (container) =>
+      new DataGrid<T>(container, getColumnsFromConfig<T>(tabId), getList()),
+    addRow: () => {
+      const list = getList();
+      list.push(create(list));
+    },
+    deleteRow: () => {
+      const list = getList();
+      if (list.length > 0) list.pop();
+    },
+  };
 }
 
-function getMaterialColumns(): ColumnDef<Material>[] {
-  return getColumnsFromConfig<Material>('materials');
-}
-
-function getSectionColumns(): ColumnDef<Section>[] {
-  return getColumnsFromConfig<Section>('sections');
-}
-
-function getSpringColumns(): ColumnDef<Spring>[] {
-  return getColumnsFromConfig<Spring>('springs');
-}
-
-function getMemberColumns(): ColumnDef<Member>[] {
-  return getColumnsFromConfig<Member>('members');
-}
-
-function getWallColumns(): ColumnDef<Wall>[] {
-  return getColumnsFromConfig<Wall>('walls');
-}
-
-function getNodeLoadColumns(): ColumnDef<NodeLoadRow>[] {
-  return getColumnsFromConfig<NodeLoadRow>('nodeloads');
-}
-
-function getCMQLoadColumns(): ColumnDef<CMQLoadRow>[] {
-  return getColumnsFromConfig<CMQLoadRow>('cmqloads');
-}
-
-function getMemberLoadColumns(): ColumnDef<MemberLoadRow>[] {
-  return getColumnsFromConfig<MemberLoadRow>('memberloads');
-}
+const tabProviders: Record<string, TabDataProvider> = {
+  nodes: entityProvider('nodes', () => doc.nodes, () => {
+    const n = new Node();
+    n.number = doc.newNodeNumber;
+    return n;
+  }),
+  boundaries: entityProvider('boundaries', () => doc.boundaries, () => {
+    const bc = new BoundaryCondition();
+    bc.nodeNumber = nextNumber(doc.boundaries.map(b => ({ number: b.nodeNumber })));
+    return bc;
+  }),
+  materials: entityProvider('materials', () => doc.materials, (list) => {
+    const m = new Material();
+    m.number = nextNumber(list);
+    return m;
+  }),
+  sections: entityProvider('sections', () => doc.sections, (list) => {
+    const s = new Section();
+    s.number = nextNumber(list);
+    return s;
+  }),
+  springs: entityProvider('springs', () => doc.springs, (list) => {
+    const sp = new Spring();
+    sp.number = nextNumber(list);
+    return sp;
+  }),
+  members: entityProvider('members', () => doc.members, () => {
+    const mem = new Member();
+    mem.number = doc.newMemberNumber;
+    return mem;
+  }),
+  walls: entityProvider('walls', () => doc.walls, (list) => {
+    const w = new Wall();
+    w.number = nextNumber(list);
+    return w;
+  }),
+  nodeloads: {
+    createGrid: (container) => {
+      const loads: NodeLoadRow[] = doc.nodes
+        .filter(n => n.loads.length > doc.loadCaseIndex)
+        .map(n => {
+          const load = n.getLoad(doc.loadCaseIndex);
+          return { nodeNumber: n.number, p1: load.p1, p2: load.p2, p3: load.p3, m1: load.m1, m2: load.m2, m3: load.m3 };
+        });
+      return new DataGrid(container, getColumnsFromConfig<NodeLoadRow>('nodeloads'), loads);
+    },
+  },
+  cmqloads: {
+    createGrid: (container) => {
+      const loads: CMQLoadRow[] = doc.members
+        .filter(m => m.cmqLoads.length > doc.loadCaseIndex)
+        .map(m => {
+          const load = m.getCMQLoad(doc.loadCaseIndex);
+          return { memberNumber: m.number, moy: load.moy, moz: load.moz, iMy: load.iMy, iMz: load.iMz, iQx: load.iQx, iQy: load.iQy, iQz: load.iQz, jMy: load.jMy, jMz: load.jMz, jQx: load.jQx, jQy: load.jQy, jQz: load.jQz };
+        });
+      return new DataGrid(container, getColumnsFromConfig<CMQLoadRow>('cmqloads'), loads);
+    },
+  },
+  memberloads: {
+    createGrid: (container) => {
+      const loads: MemberLoadRow[] = doc.members
+        .filter(m => m.memberLoads.length > doc.loadCaseIndex)
+        .map(m => {
+          const load = m.getMemberLoad(doc.loadCaseIndex);
+          return { memberNumber: m.number, lengthMethod: load.lengthMethod, type: load.type, direction: load.direction, scale: load.scale, loadCode: load.loadCode, unitLoad: load.unitLoad, p1: load.p1, p2: load.p2, p3: load.p3 };
+        });
+      return new DataGrid(container, getColumnsFromConfig<MemberLoadRow>('memberloads'), loads);
+    },
+  },
+};
 
 // ===== 起動 =====
 document.addEventListener('DOMContentLoaded', init);
