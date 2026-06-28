@@ -1,5 +1,6 @@
 import './styles/main.css';
 import { FrameDocument } from './models/FrameDocument';
+import { parseFrameAnalysisYaml, FrameYamlImportResult } from './io/FrameAnalysisYaml';
 import { parseFrameJson, writeFrameJson } from './io/FrameJson';
 import { ModelViewer, ViewerSelection } from './viewer/ModelViewer';
 import { DataGrid, ColumnDef } from './ui/DataGrid';
@@ -293,19 +294,19 @@ function deleteRow(): void {
 function openFile(): void {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.json';
+  input.accept = '.json,.yaml,.yml';
   input.addEventListener('change', async () => {
     const file = input.files?.[0];
     if (!file) return;
     const backup = writeFrameJson(doc);
     try {
       const text = await file.text();
-      parseFrameJson(text, doc);
+      const yamlResult = loadDocumentFromText(file.name, text);
       resetViewerSelection();
       viewer.updateModel();
       refreshGrid();
       updateLoadCaseSelector();
-      updateStatus(t('status.fileLoaded', file.name, doc.nodes.length, doc.members.length));
+      updateStatus(formatLoadStatus(file.name, yamlResult));
     } catch (e) {
       try {
         parseFrameJson(backup, doc);
@@ -321,6 +322,42 @@ function openFile(): void {
     }
   });
   input.click();
+}
+
+function loadDocumentFromText(fileName: string, text: string): FrameYamlImportResult | null {
+  if (isYamlFile(fileName)) {
+    const result = parseFrameAnalysisYaml(text, doc);
+    const warnings = result.diagnostics.filter(d => d.level === 'warn' || d.level === 'error');
+    if (warnings.length > 0) {
+      console.warn('Analysis YAML import diagnostics', warnings);
+    }
+    return result;
+  }
+
+  parseFrameJson(text, doc);
+  return null;
+}
+
+function isYamlFile(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.yaml') || lower.endsWith('.yml');
+}
+
+function formatLoadStatus(fileName: string, yamlResult: FrameYamlImportResult | null): string {
+  if (!yamlResult) {
+    return t('status.fileLoaded', fileName, doc.nodes.length, doc.members.length);
+  }
+
+  const warningCount = yamlResult.diagnostics.filter(d => d.level === 'warn').length;
+  const errorCount = yamlResult.diagnostics.filter(d => d.level === 'error').length;
+  return t(
+    'status.yamlFileLoaded',
+    fileName,
+    doc.nodes.length,
+    doc.members.length,
+    yamlResult.skippedElementCount,
+    warningCount + errorCount,
+  );
 }
 
 function saveFile(): void {
