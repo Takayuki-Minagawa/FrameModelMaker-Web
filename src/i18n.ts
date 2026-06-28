@@ -8,7 +8,7 @@ const messages: Record<Lang, Record<string, string>> = {
     'menu.edit': '編集',
     'menu.loadcase': '荷重定義',
     'menu.new': '新規作成',
-    'menu.open': '開く (.json)',
+    'menu.open': '開く (.json/.yaml)',
     'menu.save': '保存 (.json)',
     'menu.sample': 'サンプル読込',
     'menu.showNodeNum': '節点番号 表示/非表示',
@@ -45,6 +45,7 @@ const messages: Record<Lang, Record<string, string>> = {
     'status.loadcaseAdded': '荷重定義 {0} 追加',
     'status.loadcaseDeleted': '荷重定義削除',
     'status.fileLoaded': '読込完了: {0} (節点:{1} 部材:{2})',
+    'status.yamlFileLoaded': 'YAML読込完了: {0} (節点:{1} 部材:{2} スキップ:{3} 診断:{4})',
     'status.encodingWarning': ' [警告: {0}でデコード]',
     'status.loadError': '読込エラー: {0}',
     'status.fileSaved': 'ファイル保存完了',
@@ -133,18 +134,21 @@ const messages: Record<Lang, Record<string, string>> = {
     'help.close': '閉じる',
     'help.content': `
 <h3>概要</h3>
-<p>FrameModelMaker-Web は、立体フレーム（骨組構造）の解析モデルを作成・編集・可視化する Web アプリケーションです。シンプルな JSON 形式のファイルを読み書きできます。</p>
+<p>FrameModelMaker-Web は、立体フレーム（骨組構造）の解析モデルを作成・編集・可視化する Web アプリケーションです。シンプルな JSON 形式のファイルを読み書きでき、解析用 YAML を形状確認用にインポートできます。</p>
 
 <h3>ファイル操作</h3>
 <table>
 <tr><td><b>新規作成</b></td><td>モデルを初期化します</td></tr>
-<tr><td><b>開く</b></td><td>.json ファイルを読み込みます</td></tr>
+<tr><td><b>開く</b></td><td>.json ファイル、または解析用 .yaml/.yml ファイルを読み込みます</td></tr>
 <tr><td><b>保存</b></td><td>現在のモデルを .json ファイルとしてダウンロードします</td></tr>
 <tr><td><b>サンプル読込</b></td><td>内蔵のオリジナル建物モデル JSON サンプルを読み込みます</td></tr>
 </table>
 
 <h3>JSON 入力フォーマット</h3>
 <p>入力データは、クラス管理している要素をそのまま扱えるシンプルな JSON 形式です。不要な説明ヘッダーは含みません。</p>
+
+<h3>YAML インポート</h3>
+<p>解析用 YAML は、節点・線材・境界条件を現在の編集モデルへ変換して読み込みます。保存は従来どおり JSON 形式です。</p>
 
 <h3>3D ビュー操作</h3>
 <table>
@@ -186,7 +190,7 @@ const messages: Record<Lang, Record<string, string>> = {
     'menu.edit': 'Edit',
     'menu.loadcase': 'Load Case',
     'menu.new': 'New',
-    'menu.open': 'Open (.json)',
+    'menu.open': 'Open (.json/.yaml)',
     'menu.save': 'Save (.json)',
     'menu.sample': 'Load Sample',
     'menu.showNodeNum': 'Node Numbers Show/Hide',
@@ -223,6 +227,7 @@ const messages: Record<Lang, Record<string, string>> = {
     'status.loadcaseAdded': 'Load case {0} added',
     'status.loadcaseDeleted': 'Load case deleted',
     'status.fileLoaded': 'Loaded: {0} (Nodes:{1} Members:{2})',
+    'status.yamlFileLoaded': 'YAML loaded: {0} (Nodes:{1} Members:{2} Skipped:{3} Diagnostics:{4})',
     'status.encodingWarning': ' [Warning: decoded as {0}]',
     'status.loadError': 'Load error: {0}',
     'status.fileSaved': 'File saved',
@@ -311,18 +316,21 @@ const messages: Record<Lang, Record<string, string>> = {
     'help.close': 'Close',
     'help.content': `
 <h3>Overview</h3>
-<p>FrameModelMaker-Web is a web application for creating, editing, and visualizing 3D frame (skeletal structure) analysis models. It reads and writes simple JSON model files.</p>
+<p>FrameModelMaker-Web is a web application for creating, editing, and visualizing 3D frame (skeletal structure) analysis models. It reads and writes simple JSON model files, and can import analysis YAML for geometry review.</p>
 
 <h3>File Operations</h3>
 <table>
 <tr><td><b>New</b></td><td>Initialize a new model</td></tr>
-<tr><td><b>Open</b></td><td>Load a .json file</td></tr>
+<tr><td><b>Open</b></td><td>Load a .json file or import an analysis .yaml/.yml file</td></tr>
 <tr><td><b>Save</b></td><td>Download the current model as a .json file</td></tr>
 <tr><td><b>Load Sample</b></td><td>Load a built-in JSON sample converted from the original building model</td></tr>
 </table>
 
 <h3>JSON Input Format</h3>
 <p>Input data uses a simple JSON structure that maps directly to managed class elements, without unrelated explanatory headers.</p>
+
+<h3>YAML Import</h3>
+<p>Analysis YAML files are converted into the current editable model for node, member, and boundary geometry review. Saving still writes the existing JSON format.</p>
 
 <h3>3D View Controls</h3>
 <table>

@@ -261,6 +261,50 @@ interface FrameJsonDocument {
 
 ---
 
+## 解析用 YAML インポート
+
+JSON保存形式とは別に、解析用に生成された YAML を形状確認用モデルとしてインポートできます。対象は `schema_version`, `units`, `model` を持つスキーマで、`model.nodes`, `model.supports`, `model.materials`, `model.sections`, `model.elements` を `FrameDocument` へ変換します。
+
+### 対応する主な入力
+
+| YAML | 変換先 |
+|------|--------|
+| `model.name` | `FrameDocument.title` |
+| `model.nodes[].tag/x/y/z` | `Node.number/x/y/z` |
+| `model.supports[].node_tag/dofs` | `BoundaryCondition` |
+| `model.materials` | `Material[]` |
+| `model.sections` | `Section[]` |
+| `elasticTimoshenkoBeam3D` | `Member` |
+| `truss3D` | `Member` |
+| `twoNodeLink3D` | 表示用 `Member` |
+
+### 単位変換
+
+YAMLが `mm/N` 系の場合、アプリ内部の `cm/kN` 系へ変換します。
+
+| 入力単位 | 内部単位 | 変換 |
+|----------|----------|------|
+| `mm` | `cm` | `/ 10` |
+| `N/mm^2` | `kN/cm^2` | `* 0.1` |
+| `mm^2` | `cm^2` | `/ 100` |
+| `mm^4` | `cm^4` | `/ 10000` |
+
+### ゼロレングス・不正要素の扱い
+
+読み込み時は診断を集め、可能な限りファイル全体の読み込みを継続します。
+
+1. 節点タグ重複、要素タグ重複、非有限座標などモデル全体の整合性を壊す入力は読み込み失敗にします。
+2. 端点節点が存在しない要素は、その要素だけスキップします。
+3. `elasticTimoshenkoBeam3D` と `truss3D` のゼロレングス要素はスキップします。
+4. `twoNodeLink3D` のゼロレングス要素は警告付きで表示用部材として保持します。
+5. 現行JSONに保存先がない `equalDOF`, 節点質量, グループ, トレース情報, リンク剛性・方向は完全には保持されません。
+
+### 保存
+
+YAMLはインポート専用です。YAMLから読み込んだモデルを保存する場合も、出力形式は現行JSONです。
+
+---
+
 ## UI 構成
 
 ### 画面レイアウト
@@ -298,7 +342,7 @@ interface FrameJsonDocument {
 | メニュー | 項目 | 動作 |
 |---------|------|------|
 | ファイル | 新規作成 | ドキュメント初期化 |
-| | 開く | `.json` ファイル読み込み |
+| | 開く | `.json` ファイル読み込み、または解析用 `.yaml` / `.yml` インポート |
 | | 保存 | JSON ファイルでダウンロード |
 | | サンプル読込 | 内蔵 JSON サンプル読み込み |
 | 表示 | 節点番号表示 | 3D ビュー上の番号表示切替 |
