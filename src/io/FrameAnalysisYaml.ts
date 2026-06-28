@@ -129,14 +129,24 @@ function buildMaterials(
   return { materials, materialNumberByRef };
 }
 
-function inferSectionMaterialRefs(elements: unknown[]): Map<string, string> {
+function inferSectionMaterialRefs(elements: unknown[], diagnostics: FrameYamlImportDiagnostic[]): Map<string, string> {
   const refs = new Map<string, string>();
   for (const value of elements) {
     const raw = asObject(value);
     const sectionRef = toString_(raw.section_ref);
     const materialRef = toString_(raw.material_ref);
-    if (sectionRef && materialRef && !refs.has(sectionRef)) {
+    if (!sectionRef || !materialRef) continue;
+
+    const existing = refs.get(sectionRef);
+    if (!existing) {
       refs.set(sectionRef, materialRef);
+    } else if (existing !== materialRef) {
+      diagnostics.push(makeDiagnostic(
+        'warn',
+        'section_material_ref_conflict',
+        `Section "${sectionRef}" is referenced with both "${existing}" and "${materialRef}" materials; "${existing}" is used for the imported section.`,
+        toPositiveInt(raw.tag) || undefined,
+      ));
     }
   }
   return refs;
@@ -423,6 +433,7 @@ export function parseFrameAnalysisYaml(text: string, doc: FrameDocument): FrameY
 
   const units = asObject(root.units);
   const lengthFactor = requireUnitFactor(units, 'length', 'mm', 0.1);
+  requireUnitFactor(units, 'force', 'N', 1);
   const stressFactor = requireUnitFactor(units, 'stress', 'N/mm^2', 0.1);
   const areaFactor = requireUnitFactor(units, 'area', 'mm^2', 0.01);
   const secondMomentFactor = requireUnitFactor(units, 'second_moment', 'mm^4', 0.0001);
@@ -447,7 +458,7 @@ export function parseFrameAnalysisYaml(text: string, doc: FrameDocument): FrameY
   }
 
   const { materials, materialNumberByRef } = buildMaterials(asObject(model.materials), stressFactor);
-  const sectionMaterialRefs = inferSectionMaterialRefs(rawElements);
+  const sectionMaterialRefs = inferSectionMaterialRefs(rawElements, diagnostics);
   const sectionResult = buildSections(
     asObject(model.sections),
     materialNumberByRef,
@@ -483,10 +494,6 @@ export function parseFrameAnalysisYaml(text: string, doc: FrameDocument): FrameY
   doc.sections = sectionResult.sections;
   doc.members = members;
   doc.boundaries = boundaries;
-  doc.springs = [];
-  doc.walls = [];
-  doc.loadCaseCount = 1;
-  doc.loadCaseIndex = 0;
   for (const boundary of doc.boundaries) {
     const node = nodeMap.get(boundary.nodeNumber);
     if (node) node.boundaryCondition = boundary;

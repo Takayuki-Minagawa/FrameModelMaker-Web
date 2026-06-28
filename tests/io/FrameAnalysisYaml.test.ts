@@ -146,6 +146,7 @@ describe('FrameAnalysisYaml', () => {
 schema_version: '1'
 units:
   length: mm
+  force: N
   stress: N/mm^2
   area: mm^2
   second_moment: mm^4
@@ -174,6 +175,7 @@ model:
 schema_version: '2'
 units:
   length: mm
+  force: N
   stress: N/mm^2
   area: mm^2
   second_moment: mm^4
@@ -186,6 +188,7 @@ model:
 schema_version: '1'
 units:
   length: m
+  force: N
   stress: N/mm^2
   area: mm^2
   second_moment: mm^4
@@ -198,6 +201,20 @@ model:
 schema_version: '1'
 units:
   length: mm
+  force: kN
+  stress: N/mm^2
+  area: mm^2
+  second_moment: mm^4
+model:
+  nodes: []
+  elements: []
+`, doc)).toThrow('units.force must be "N"');
+
+    expect(() => parseFrameAnalysisYaml(`
+schema_version: '1'
+units:
+  length: mm
+  force: N
   stress: N/mm^2
   area: mm^2
   second_moment: mm^4
@@ -207,6 +224,47 @@ model:
 `, doc)).toThrow('model.nodes must be an array');
 
     expect(doc.title).toBe('unchanged');
+  });
+
+  it('warns when a section is referenced with multiple materials', () => {
+    const doc = new FrameDocument();
+    const result = parseFrameAnalysisYaml(`
+schema_version: '1'
+units:
+  length: mm
+  force: N
+  stress: N/mm^2
+  area: mm^2
+  second_moment: mm^4
+model:
+  nodes:
+    - { tag: 1, x: 0, y: 0, z: 0 }
+    - { tag: 2, x: 1000, y: 0, z: 0 }
+    - { tag: 3, x: 0, y: 1000, z: 0 }
+  materials:
+    steel: { tag: 1, elastic_modulus: 205000, shear_modulus: 79000 }
+    alc: { tag: 2, elastic_modulus: 1800, shear_modulus: 750 }
+  sections:
+    B:
+      area: 20000
+      inertia_y: 66700000
+      inertia_z: 16700000
+      torsion_constant: 20000000
+      shear_area_y: 16000
+      shear_area_z: 16000
+  elements:
+    - { type: elasticTimoshenkoBeam3D, tag: 1001, node_i: 1, node_j: 2, material_ref: steel, section_ref: B }
+    - { type: elasticTimoshenkoBeam3D, tag: 1002, node_i: 1, node_j: 3, material_ref: alc, section_ref: B }
+`, doc);
+
+    expect(doc.sections.find(section => section.comment === 'B')?.materialNumber).toBe(1);
+    expect(result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'warn',
+        code: 'section_material_ref_conflict',
+        tag: 1002,
+      }),
+    ]));
   });
 
   it.skipIf(!process.env.FRAME_ANALYSIS_YAML_FIXTURE || !existsSync(process.env.FRAME_ANALYSIS_YAML_FIXTURE ?? ''))(
