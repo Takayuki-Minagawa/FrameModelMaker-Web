@@ -126,11 +126,18 @@ export function calculateModelStatistics(
 
   let bounds: ModelStatistics['bounds'] = null;
   if (document.nodes.length > 0) {
-    const xs = document.nodes.map(node => node.x);
-    const ys = document.nodes.map(node => node.y);
-    const zs = document.nodes.map(node => node.z);
-    const min = { x: Math.min(...xs), y: Math.min(...ys), z: Math.min(...zs) };
-    const max = { x: Math.max(...xs), y: Math.max(...ys), z: Math.max(...zs) };
+    const firstNode = document.nodes[0];
+    const min = { x: firstNode.x, y: firstNode.y, z: firstNode.z };
+    const max = { x: firstNode.x, y: firstNode.y, z: firstNode.z };
+    for (let index = 1; index < document.nodes.length; index++) {
+      const node = document.nodes[index];
+      min.x = Math.min(min.x, node.x);
+      min.y = Math.min(min.y, node.y);
+      min.z = Math.min(min.z, node.z);
+      max.x = Math.max(max.x, node.x);
+      max.y = Math.max(max.y, node.y);
+      max.z = Math.max(max.z, node.z);
+    }
     bounds = { min, max, size: { x: max.x - min.x, y: max.y - min.y, z: max.z - min.z } };
   }
 

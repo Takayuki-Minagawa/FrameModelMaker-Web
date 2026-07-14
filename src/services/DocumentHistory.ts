@@ -34,6 +34,16 @@ export interface AsyncKeyValueStorage {
   removeItem(key: string): Promise<void>;
 }
 
+function comparableSnapshot(snapshot: string): string {
+  const value = JSON.parse(snapshot) as Record<string, unknown>;
+  delete value.loadCaseIndex;
+  return JSON.stringify(value);
+}
+
+function snapshotsMatch(left: string, right: string): boolean {
+  return comparableSnapshot(left) === comparableSnapshot(right);
+}
+
 export class DocumentHistory {
   private readonly document: FrameDocument;
   private readonly maxEntries: number;
@@ -75,7 +85,7 @@ export class DocumentHistory {
   }
 
   get isDirty(): boolean {
-    return writeFrameJson(this.document) !== this.savedSnapshot;
+    return !snapshotsMatch(writeFrameJson(this.document), this.savedSnapshot);
   }
 
   get length(): number {
@@ -93,7 +103,8 @@ export class DocumentHistory {
   /** 現在状態を履歴へ追加。同一スナップショットは追加しない。 */
   capture(label: string = 'Edit'): boolean {
     const snapshot = writeFrameJson(this.document);
-    if (snapshot === this.entries[this.currentIndex]?.snapshot) return false;
+    const currentSnapshot = this.entries[this.currentIndex]?.snapshot;
+    if (currentSnapshot && snapshotsMatch(snapshot, currentSnapshot)) return false;
     this.entries.splice(this.currentIndex + 1);
     this.entries.push({ snapshot, label, timestamp: Date.now() });
     if (this.entries.length > this.maxEntries) {
@@ -152,9 +163,14 @@ export class DocumentHistory {
   private restoreEntry(index: number): boolean {
     const entry = this.entries[index];
     if (!entry) return false;
+    const activeLoadCaseIndex = this.document.loadCaseIndex;
     this.restoring = true;
     try {
       parseFrameJson(entry.snapshot, this.document, { mode: 'strict' });
+      this.document.loadCaseIndex = Math.min(
+        Math.max(0, activeLoadCaseIndex),
+        Math.max(0, this.document.loadCaseCount - 1),
+      );
       this.currentIndex = index;
     } finally {
       this.restoring = false;

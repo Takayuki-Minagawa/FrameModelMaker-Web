@@ -155,6 +155,27 @@ describe('DataGrid', () => {
     expect(changed.mock.calls[0][0].changes).toHaveLength(2);
   });
 
+  it('skips empty pasted cells without clearing numeric or checkbox values', () => {
+    const rows = makeRows();
+    const changed = vi.fn<(change: DataGridChange<Row>) => void>();
+    grid = new DataGrid(container, columns, rows);
+    grid.setOnDataChanged(changed);
+    grid.setCellValidation(1, 'id', 'Stale numeric error.');
+    grid.setCellValidation(1, 'enabled', 'Stale checkbox error.');
+
+    const result = grid.pasteTSV('\t\t', {
+      rowIndex: 1,
+      columnIndex: 0,
+    });
+
+    expect(rows[1]).toEqual({ id: 1, name: 'Alpha', enabled: true, kind: 1 });
+    expect(grid.getCellValidation(1, 'id')).toBeNull();
+    expect(grid.getCellValidation(1, 'enabled')).toBeNull();
+    expect(container.querySelector('.data-grid-cell-error')).toBeNull();
+    expect(result).toMatchObject({ appliedCellCount: 0, errors: [], changes: [] });
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   it('starts toolbar-style paste at the active selected row', () => {
     const rows = makeRows();
     grid = new DataGrid(container, columns, rows);

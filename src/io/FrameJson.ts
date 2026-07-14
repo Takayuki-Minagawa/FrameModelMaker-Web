@@ -255,6 +255,27 @@ function toString_(value: unknown, path: string, context: ParseContext, fallback
 function toBoolean(value: unknown, path: string, context: ParseContext, fallback: boolean): boolean {
   if (value == null) return fallback;
   if (typeof value === 'boolean') return value;
+  if (context.mode === 'lenient') {
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : value;
+    if (normalized === 1 || normalized === '1' || normalized === 'true') {
+      context.diagnostics.push({
+        level: 'warning',
+        code: 'coerced_boolean',
+        path,
+        message: `${path} was converted to true.`,
+      });
+      return true;
+    }
+    if (normalized === 0 || normalized === '0' || normalized === 'false') {
+      context.diagnostics.push({
+        level: 'warning',
+        code: 'coerced_boolean',
+        path,
+        message: `${path} was converted to false.`,
+      });
+      return false;
+    }
+  }
   invalidValue(context, path, 'a boolean', value);
   return fallback;
 }
@@ -331,20 +352,20 @@ function cloneJsonObject(
 function inferRawLoadCaseCount(raw: JsonObject): number {
   const nodes = Array.isArray(raw.nodes) ? raw.nodes : [];
   const members = Array.isArray(raw.members) ? raw.members : [];
-  const lengths: number[] = [1];
+  let count = 1;
   for (const value of nodes) {
     const loads = asObject(value).loads;
-    if (Array.isArray(loads)) lengths.push(loads.length);
+    if (Array.isArray(loads)) count = Math.max(count, loads.length);
   }
   for (const value of members) {
     const member = asObject(value);
-    if (Array.isArray(member.memberLoads)) lengths.push(member.memberLoads.length);
-    if (Array.isArray(member.cmqLoads)) lengths.push(member.cmqLoads.length);
+    if (Array.isArray(member.memberLoads)) count = Math.max(count, member.memberLoads.length);
+    if (Array.isArray(member.cmqLoads)) count = Math.max(count, member.cmqLoads.length);
   }
   const requested = Number(raw.loadCaseCount);
-  if (Number.isFinite(requested)) lengths.push(Math.trunc(requested));
-  if (Array.isArray(raw.loadCases)) lengths.push(raw.loadCases.length);
-  return Math.max(...lengths, 1);
+  if (Number.isFinite(requested)) count = Math.max(count, Math.trunc(requested));
+  if (Array.isArray(raw.loadCases)) count = Math.max(count, raw.loadCases.length);
+  return count;
 }
 
 function migrateV1ToV2(raw: JsonObject): JsonObject {
@@ -596,11 +617,12 @@ function parseWall(value: unknown, index: number, context: ParseContext): Wall {
 }
 
 function maxLoadCaseCount(document: FrameDocument): number {
-  return Math.max(
-    1,
-    ...document.nodes.map(node => node.loads.length),
-    ...document.members.flatMap(member => [member.memberLoads.length, member.cmqLoads.length]),
-  );
+  let count = 1;
+  for (const node of document.nodes) count = Math.max(count, node.loads.length);
+  for (const member of document.members) {
+    count = Math.max(count, member.memberLoads.length, member.cmqLoads.length);
+  }
+  return count;
 }
 
 function parseLoadCases(raw: JsonObject, count: number, context: ParseContext): LoadCase[] {
@@ -836,7 +858,8 @@ export function parseFrameJson(
     .map((value, index) => toString_(value, `$.calcCaseMemo[${index}]`, context));
 
   const requestedCount = Math.max(1, toInt(raw.loadCaseCount, '$.loadCaseCount', context, 1));
-  temporary.loadCaseCount = Math.max(requestedCount, maxLoadCaseCount(temporary));
+  const namedLoadCaseCount = Array.isArray(raw.loadCases) ? raw.loadCases.length : 0;
+  temporary.loadCaseCount = Math.max(requestedCount, namedLoadCaseCount, maxLoadCaseCount(temporary));
   temporary.loadCaseIndex = Math.min(
     Math.max(0, toInt(raw.loadCaseIndex, '$.loadCaseIndex', context)),
     temporary.loadCaseCount - 1,

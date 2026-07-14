@@ -616,8 +616,6 @@ export class FrameDocument {
     if (!Number.isFinite(threshold) || threshold < 0) {
       throw new Error('Node merge threshold must be a finite non-negative number.');
     }
-    makeNumberMap(this.nodes, 1, 'node'); // 重複番号は安全に参照先を決められないため事前拒否
-
     const parent = this.nodes.map((_, index) => index);
     const find = (index: number): number => {
       while (parent[index] !== index) {
@@ -652,7 +650,15 @@ export class FrameDocument {
     const representativeByNodeNumber = new Map<number, number>();
     for (const indexes of components.values()) {
       const representativeNumber = this.nodes[indexes[0]].number;
-      for (const index of indexes) representativeByNodeNumber.set(this.nodes[index].number, representativeNumber);
+      for (const index of indexes) {
+        const nodeNumber = this.nodes[index].number;
+        // Invalid external documents can contain duplicate numbers. References
+        // are inherently ambiguous, so keep the first component as canonical
+        // instead of throwing or allowing a later component to overwrite it.
+        if (!representativeByNodeNumber.has(nodeNumber)) {
+          representativeByNodeNumber.set(nodeNumber, representativeNumber);
+        }
+      }
     }
     const mergedNodeCount = this.nodes.length - components.size;
     if (mergedNodeCount === 0) {

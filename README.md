@@ -118,7 +118,7 @@ npm run audit
 - YAML 解析情報を保持する `analysisMetadata`
 - 断面の正式なねじり定数 `torsionConstant`。旧 `p2_Ix` は互換フィールドとして保持
 
-`parseFrameJson()` は `strict` と `lenient` を選べます。strict はパーサーが検出した型違反を拒否し、lenient は補正内容を診断として返します。未知の将来バージョンは拒否します。JSON Schema による完全検証ではないため、読込後と検証済み出力前にはモデル診断も実行してください。
+`parseFrameJson()` は `strict` と `lenient` を選べます。strict はパーサーが検出した型違反を拒否し、lenient は補正内容を診断として返します。画面からのJSON読込はstrictを先に試し、旧ツールや手編集ファイルの型違反だけを診断付きlenient読込へフォールバックします。未知の将来バージョンは拒否します。JSON Schema による完全検証ではないため、読込後と検証済み出力前にはモデル診断も実行してください。
 
 ### 解析用 YAML
 

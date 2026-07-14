@@ -536,6 +536,12 @@ export class DataGrid<T extends object> {
         }
 
         const rawValue = cells[pastedRow][pastedColumn];
+        const validationKey = this.validationKey(visible.rowIndex, column.key);
+        if (rawValue === '') {
+          this.validations.delete(validationKey);
+          continue;
+        }
+
         const converted = this.convertRawValue(rawValue, column, visible.row, visible.rowIndex);
         if (converted.error) {
           const error = this.makeValidation(
@@ -544,7 +550,7 @@ export class DataGrid<T extends object> {
             converted.error,
             'error',
           );
-          this.validations.set(this.validationKey(visible.rowIndex, column.key), error);
+          this.validations.set(validationKey, error);
           errors.push({ ...error, rawValue });
           continue;
         }
@@ -557,12 +563,12 @@ export class DataGrid<T extends object> {
             issue.message,
             issue.severity ?? 'error',
           );
-          this.validations.set(this.validationKey(visible.rowIndex, column.key), error);
+          this.validations.set(validationKey, error);
           errors.push({ ...error, rawValue });
           continue;
         }
 
-        this.validations.delete(this.validationKey(visible.rowIndex, column.key));
+        this.validations.delete(validationKey);
         const previousValue = this.readValue(visible.row, column.key);
         if (!Object.is(previousValue, converted.value)) {
           this.writeValue(visible.row, column.key, converted.value);

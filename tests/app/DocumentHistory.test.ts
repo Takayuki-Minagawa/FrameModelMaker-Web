@@ -170,6 +170,24 @@ describe('DocumentHistory', () => {
     expect(history.isDirty).toBe(false);
   });
 
+  it('treats the active load case as view state and preserves it across undo', () => {
+    const document = new FrameDocument();
+    document.addLoadCase({ id: 'LC2', name: 'Second' });
+    const history = new DocumentHistory(document);
+
+    document.loadCaseIndex = 1;
+
+    expect(history.isDirty).toBe(false);
+    expect(history.capture('Change active load case')).toBe(false);
+    expect(history.length).toBe(1);
+
+    addNode(document, 10);
+    expect(history.isDirty).toBe(true);
+    expect(history.undo()).toBe(true);
+    expect(document.loadCaseIndex).toBe(1);
+    expect(history.isDirty).toBe(false);
+  });
+
   it('round-trips history, current position, and dirty baseline through autosave storage', () => {
     const source = new FrameDocument();
     source.title = 'Recovered model';

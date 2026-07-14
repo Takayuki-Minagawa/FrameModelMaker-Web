@@ -39,6 +39,29 @@ describe('FrameJson versioning', () => {
     expect(target.title).toBe('unchanged');
   });
 
+  it('coerces common legacy boolean encodings only in lenient mode', () => {
+    const restored = new FrameDocument();
+    const result = parseFrameJson(JSON.stringify({
+      formatVersion: 2,
+      nodes: [
+        { number: 1, isShown: 1 },
+        { number: 2, isShown: ' TRUE ' },
+      ],
+      members: [{ number: 1, isShown: 'false' }],
+      walls: [{ number: 1, isShown: '0' }],
+    }), restored, { mode: 'lenient' });
+
+    expect(restored.nodes.map(node => node.isShown)).toEqual([true, true]);
+    expect(restored.members[0].isShown).toBe(false);
+    expect(restored.walls[0].isShown).toBe(false);
+    expect(result.diagnostics.filter(diagnostic => diagnostic.code === 'coerced_boolean')).toHaveLength(4);
+
+    expect(() => parseFrameJson(JSON.stringify({
+      formatVersion: 2,
+      nodes: [{ number: 1, isShown: 1 }],
+    }), new FrameDocument(), { mode: 'strict' })).toThrow('isShown must be a boolean');
+  });
+
   it('round-trips named cases, combinations and analysis metadata', () => {
     const doc = new FrameDocument();
     const node = new Node(); node.number = 1; doc.nodes = [node];
@@ -53,6 +76,24 @@ describe('FrameJson versioning', () => {
     expect(restored.loadCases[1]).toMatchObject({ id: 'LIVE', name: 'Live' });
     expect(restored.loadCombinations[0].terms).toHaveLength(2);
     expect(restored.analysisMetadata?.extensions).toEqual({ custom: { answer: 42 } });
+  });
+
+  it('keeps every named v2 load case when loadCaseCount and load arrays are shorter', () => {
+    const restored = new FrameDocument();
+    parseFrameJson(JSON.stringify({
+      formatVersion: 2,
+      loadCaseCount: 1,
+      loadCases: [
+        { id: 'DEAD', name: 'Dead' },
+        { id: 'LIVE', name: 'Live' },
+        { id: 'WIND', name: 'Wind' },
+      ],
+      nodes: [{ number: 1, loads: [{}] }],
+    }), restored, { mode: 'strict' });
+
+    expect(restored.loadCaseCount).toBe(3);
+    expect(restored.loadCases.map(loadCase => loadCase.id)).toEqual(['DEAD', 'LIVE', 'WIND']);
+    expect(restored.nodes[0].loads).toHaveLength(3);
   });
 
   it('treats omitted v1 boundary degrees of freedom as free', () => {

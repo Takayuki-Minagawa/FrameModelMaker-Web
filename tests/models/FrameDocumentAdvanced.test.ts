@@ -139,6 +139,20 @@ describe('FrameDocument advanced integrity APIs', () => {
     expect(doc.nodes[0].boundaryCondition).toBe(doc.boundaries[0]);
   });
 
+  it('merges overlapping nodes with duplicate external numbers without throwing', () => {
+    const doc = new FrameDocument();
+    const first = new Node(0, 0, 0); first.number = 4; first.loads[0].p1 = 1;
+    const duplicate = new Node(0, 0, 0); duplicate.number = 4; duplicate.loads[0].p1 = 2;
+    doc.nodes = [first, duplicate];
+
+    const result = doc.mergeOverlappingNodes(0);
+
+    expect(result.mergedNodeCount).toBe(1);
+    expect(result.representativeByNodeNumber.get(4)).toBe(4);
+    expect(doc.nodes).toHaveLength(1);
+    expect(doc.nodes[0].loads[0].p1).toBe(3);
+  });
+
   it('consolidates analysis metadata after merging nodes', () => {
     const doc = new FrameDocument();
     const a = new Node(0, 0, 0); a.number = 1;

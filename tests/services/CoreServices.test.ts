@@ -35,6 +35,36 @@ describe('core services', () => {
     expect(stats.totalMemberVolume).toBe(50);
     expect(stats.materialQuantities[0].estimatedWeight).toBe(100);
     expect(stats.isolatedNodeNumbers).toEqual([3]);
+    expect(stats.bounds).toEqual({
+      min: { x: 0, y: 0, z: 0 },
+      max: { x: 10, y: 4, z: 0 },
+      size: { x: 10, y: 4, z: 0 },
+    });
+  });
+
+  it('returns null bounds for a model without nodes', () => {
+    const stats = calculateModelStatistics(new FrameDocument());
+
+    expect(stats.counts.nodes).toBe(0);
+    expect(stats.bounds).toBeNull();
+  });
+
+  it('calculates bounds for more nodes than can be passed as function arguments', () => {
+    const doc = new FrameDocument();
+    const nodeCount = 150_000;
+    doc.nodes = Array.from({ length: nodeCount }, (_, index) => {
+      const node = new Node(index - 75_000, (index % 11) - 5, index * 2);
+      node.number = index + 1;
+      return node;
+    });
+
+    const stats = calculateModelStatistics(doc);
+
+    expect(stats.bounds).toEqual({
+      min: { x: -75_000, y: -5, z: 0 },
+      max: { x: 74_999, y: 5, z: (nodeCount - 1) * 2 },
+      size: { x: nodeCount - 1, y: 10, z: (nodeCount - 1) * 2 },
+    });
   });
 
   it('supports dirty state, transactions, undo/redo and autosave restore', () => {

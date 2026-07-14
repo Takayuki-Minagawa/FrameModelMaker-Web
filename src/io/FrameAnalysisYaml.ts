@@ -94,6 +94,11 @@ function toNumberArray(value: unknown): number[] {
   return asArray(value).map(item => toNumber(item, NaN)).filter(Number.isFinite);
 }
 
+/** Positional arrays represent DOFs/vector components, so invalid slots must not shift later values. */
+function toPositionalNumberArray(value: unknown, fallback = 0): number[] {
+  return asArray(value).map(item => toNumber(item, fallback));
+}
+
 function toStringArray(value: unknown): string[] {
   return asArray(value).map(toString_).filter(Boolean);
 }
@@ -339,9 +344,9 @@ function parseSupports(rawSupports: unknown[], nodeMap: Map<number, Node>, diagn
 }
 
 function parseLocalAxis(raw: RawObject): LocalAxisMetadata | undefined {
-  const x = toNumberArray(raw.orient_x);
-  const y = toNumberArray(raw.orient_y);
-  const vecxz = toNumberArray(raw.vecxz);
+  const x = toPositionalNumberArray(raw.orient_x);
+  const y = toPositionalNumberArray(raw.orient_y);
+  const vecxz = toPositionalNumberArray(raw.vecxz);
   if (x.length === 0 && y.length === 0 && vecxz.length === 0) return undefined;
   return {
     ...(x.length > 0 ? { x } : {}),
@@ -378,11 +383,10 @@ function parseNodalMasses(rawMasses: unknown): NodalMassMetadata[] {
   return asEntries(rawMasses).map(({ key, value }) => {
     const raw = asObject(value);
     const direct = raw.values ?? raw.mass ?? raw.masses;
-    let values = toNumberArray(direct);
-    if (values.length === 0) {
-      values = ['mx', 'my', 'mz', 'mrx', 'mry', 'mrz']
-        .map(field => toNumber(raw[field], NaN))
-        .filter(Number.isFinite);
+    let values = toPositionalNumberArray(direct);
+    const componentFields = ['mx', 'my', 'mz', 'mrx', 'mry', 'mrz'] as const;
+    if (values.length === 0 && componentFields.some(field => raw[field] !== undefined)) {
+      values = componentFields.map(field => toNumber(raw[field], 0));
     }
     return {
       nodeTag: toPositiveInt(raw.node_tag ?? raw.node ?? key),
@@ -403,7 +407,7 @@ function parseLinkMetadata(rawElements: unknown[]): LinkElementMetadata[] {
       nodeI: toPositiveInt(raw.node_i),
       nodeJ: toPositiveInt(raw.node_j),
       directions: toStringArray(raw.dir ?? raw.directions),
-      stiffness: toNumberArray(raw.stiffness),
+      stiffness: toPositionalNumberArray(raw.stiffness),
       ...(orientation ? { orientation } : {}),
       ...(asArray(raw.shear_dist).length > 0 ? { shearDistance: toNumberArray(raw.shear_dist) } : {}),
       raw: (toJsonValue(raw) ?? {}) as Record<string, JsonValue>,
@@ -815,7 +819,7 @@ function uniqueReferenceName(base: string, used: Set<string>, fallback: string):
 export function exportFrameAnalysisYaml(doc: FrameDocument): FrameYamlExportResult {
   const diagnostics: FrameYamlImportDiagnostic[] = [];
   const metadata = doc.analysisMetadata;
-  const units: Record<string, string> = {
+  const canonicalUnits: Record<string, string> = {
     length: 'mm',
     force: 'N',
     stress: 'N/mm^2',
@@ -823,10 +827,20 @@ export function exportFrameAnalysisYaml(doc: FrameDocument): FrameYamlExportResu
     second_moment: 'mm^4',
     translational_stiffness: 'N/mm',
     rotational_stiffness: 'N*mm/rad',
-    ...(metadata?.units ?? {}),
   };
-  if (units.length !== 'mm' || units.stress !== 'N/mm^2' || units.area !== 'mm^2' || units.second_moment !== 'mm^4') {
-    throw new Error('Analysis YAML export currently requires mm/N/mm^2/mm^4 units.');
+  const metadataUnits = metadata?.units ?? {};
+  const units: Record<string, string> = { ...metadataUnits, ...canonicalUnits };
+  for (const [key, expected] of Object.entries(canonicalUnits)) {
+    const actual = metadataUnits[key];
+    if (actual != null && actual !== expected) {
+      diagnostics.push({
+        level: 'warn',
+        code: 'analysis_units_normalized_for_export',
+        message: `analysisMetadata.units.${key}="${actual}" was normalized to "${expected}" for analysis YAML export.`,
+        sourcePath: `analysisMetadata.units.${key}`,
+        details: { actual, expected },
+      });
+    }
   }
 
   const materialRefs = new Map<number, string>();

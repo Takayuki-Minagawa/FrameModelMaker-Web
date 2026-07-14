@@ -8,6 +8,7 @@ import {
   safeFilename,
 } from './app/FileDownloads';
 import { ToolPanel } from './app/ToolPanel';
+import { parseUserFrameJson } from './app/ModelImport';
 import gridColumns from './data/gridColumns.json';
 import { getLang, Lang, setLang, t } from './i18n';
 import { parseFrameJson, writeFrameJson } from './io/FrameJson';
@@ -520,7 +521,7 @@ async function loadModelFile(file: File): Promise<void> {
       },
     })));
   } else {
-    const result = parseFrameJson(text, incoming, { mode: 'strict' });
+    const result = parseUserFrameJson(text, incoming);
     diagnostics.push(...result.diagnostics.map(item => ({
       level: item.level === 'warning' ? 'warn' as const : 'info' as const,
       code: item.code,
@@ -529,6 +530,7 @@ async function loadModelFile(file: File): Promise<void> {
   }
   if (!replaceDocument(incoming, file.name, diagnostics)) return;
   updateStatus(t('status.fileLoaded', file.name, doc.nodes.length, doc.members.length));
+  if (diagnostics.some(item => item.code === 'lenient_import_fallback')) showImportReport();
 }
 
 function replaceDocument(incoming: FrameDocument, fileName: string, diagnostics: UnifiedDiagnostic[]): boolean {
@@ -619,7 +621,7 @@ async function loadSample(): Promise<void> {
   const response = await fetch('./samples/FrameModel_Sample.json');
   if (!response.ok) throw new Error(`Sample request failed: ${response.status}`);
   const incoming = new FrameDocument();
-  const result = parseFrameJson(await response.text(), incoming, { mode: 'strict' });
+  const result = parseUserFrameJson(await response.text(), incoming);
   if (!replaceDocument(incoming, 'FrameModel_Sample.json', result.diagnostics.map(item => ({
     level: item.level === 'warning' ? 'warn' : 'info',
     code: item.code,
@@ -1821,9 +1823,12 @@ function updateLoadCaseSelector(): void {
   });
   selector.value = String(doc.loadCaseIndex);
   selector.onchange = () => {
-    mutateDocument('Change active load case', () => {
-      doc.loadCaseIndex = Number(selector.value);
-    });
+    const nextIndex = Number(selector.value);
+    if (!Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex >= doc.loadCaseCount) return;
+    doc.loadCaseIndex = nextIndex;
+    viewer.setLoadCase(nextIndex);
+    refreshGrid();
+    updateModelSummary();
   };
 }
 
