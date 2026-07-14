@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { FrameDocument } from '../../src/models/FrameDocument';
-import { writeFrameJson } from '../../src/io/FrameJson';
-import { parseFrameAnalysisYaml } from '../../src/io/FrameAnalysisYaml';
-import { SectionType } from '../../src/models/Section';
+import { parseFrameJson, writeFrameJson } from '../../src/io/FrameJson';
+import { exportFrameAnalysisYaml, parseFrameAnalysisYaml } from '../../src/io/FrameAnalysisYaml';
+import { Section, SectionType } from '../../src/models/Section';
 
 const SAMPLE_YAML = `
 schema_version: '1'
@@ -113,7 +113,7 @@ describe('FrameAnalysisYaml', () => {
       'missing_support_node',
       'zero_length_link_element',
       'short_link_element',
-      'link_metadata_not_preserved',
+      'link_metadata_preserved',
       'zero_length_frame_element',
       'missing_element_node',
       'import_summary',
@@ -124,6 +124,109 @@ describe('FrameAnalysisYaml', () => {
       'members=4',
       'skippedElements=2',
     ]));
+  });
+
+  it('preserves typed analysis metadata and can export it again', () => {
+    const doc = new FrameDocument();
+    parseFrameAnalysisYaml(SAMPLE_YAML.replace(
+      '  supports:',
+      `  constraints:\n    - { type: equalDOF, retained_node: 1, constrained_node: 2, dofs: [ux, uy] }\n  nodal_masses:\n    - { node_tag: 2, values: [1, 2, 3, 0, 0, 0] }\n  groups:\n    main: { node_tags: [1, 2], element_tags: [1001] }\n  supports:`,
+    ), doc);
+
+    expect(doc.analysisMetadata?.constraints[0]).toMatchObject({ retainedNode: 1, constrainedNode: 2, dofs: ['ux', 'uy'] });
+    expect(doc.analysisMetadata?.nodalMasses[0].values).toEqual([1, 2, 3, 0, 0, 0]);
+    expect(doc.analysisMetadata?.linkElements).toHaveLength(2);
+
+    const exported = exportFrameAnalysisYaml(doc);
+    expect(exported.yaml).toContain('equalDOF');
+    expect(exported.yaml).toContain('stiffness');
+    const restored = new FrameDocument();
+    parseFrameAnalysisYaml(exported.yaml, restored);
+    expect(restored.analysisMetadata?.constraints).toHaveLength(1);
+    expect(restored.analysisMetadata?.linkElements).toHaveLength(2);
+  });
+
+  it('preserves positional gaps in nodal mass, link stiffness and orientation arrays', () => {
+    const doc = new FrameDocument();
+    parseFrameAnalysisYaml(`
+schema_version: '1'
+units:
+  length: mm
+  force: N
+  stress: N/mm^2
+  area: mm^2
+  second_moment: mm^4
+model:
+  nodes:
+    - { tag: 1, x: 0, y: 0, z: 0 }
+    - { tag: 2, x: 1, y: 0, z: 0 }
+  nodal_masses:
+    - { node_tag: 1, mx: 1, mz: 3, mrz: 6 }
+    - { node_tag: 2, values: [10, invalid, 30] }
+  elements:
+    - type: twoNodeLink3D
+      tag: 10
+      node_i: 1
+      node_j: 2
+      dir: [ux, uy, uz]
+      stiffness: [100, invalid, 300]
+      orient_x: [1, invalid, 3]
+      orient_y: [invalid, 2, 0]
+`, doc);
+
+    expect(doc.analysisMetadata?.nodalMasses[0].values).toEqual([1, 0, 3, 0, 0, 6]);
+    expect(doc.analysisMetadata?.nodalMasses[1].values).toEqual([10, 0, 30]);
+    expect(doc.analysisMetadata?.linkElements[0].stiffness).toEqual([100, 0, 300]);
+    expect(doc.analysisMetadata?.linkElements[0].orientation).toEqual({
+      x: [1, 0, 3],
+      y: [0, 2, 0],
+    });
+    expect(doc.analysisMetadata?.localAxes['10']).toEqual({
+      x: [1, 0, 3],
+      y: [0, 2, 0],
+    });
+  });
+
+  it('normalizes unsupported metadata units during YAML export with diagnostics', () => {
+    const doc = new FrameDocument();
+    parseFrameJson(JSON.stringify({
+      formatVersion: 2,
+      analysisMetadata: {
+        sourceFormat: 'frame-json',
+        schemaVersion: '1',
+        units: { length: 'cm', force: 'kN', custom: 'preserved' },
+      },
+    }), doc, { mode: 'strict' });
+
+    const exported = exportFrameAnalysisYaml(doc);
+
+    expect(exported.yaml).toContain('length: mm');
+    expect(exported.yaml).toContain('force: N');
+    expect(exported.yaml).toContain('custom: preserved');
+    expect(exported.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'warn',
+        code: 'analysis_units_normalized_for_export',
+        sourcePath: 'analysisMetadata.units.length',
+      }),
+      expect.objectContaining({
+        code: 'analysis_units_normalized_for_export',
+        sourcePath: 'analysisMetadata.units.force',
+      }),
+    ]));
+  });
+
+  it('exports an explicit zero torsion constant without falling back to p2_Ix', () => {
+    const doc = new FrameDocument();
+    const section = new Section();
+    section.number = 1;
+    section.p2_Ix = 12;
+    section.torsionConstant = 0;
+    doc.sections = [section];
+
+    const exported = exportFrameAnalysisYaml(doc);
+
+    expect(exported.yaml).toMatch(/torsion_constant:\s+0(?:\r?\n|$)/);
   });
 
   it('keeps the imported document writable as the current JSON format', () => {

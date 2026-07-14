@@ -20,7 +20,13 @@ export class Spring {
   /** デフォルトバネ（番号1,2）の数 */
   static readonly DEFAULT_SPRING_COUNT = 3;
 
+  static readonly RESERVED_NUMBERS = new Set([1, 2]);
+
+  static isReservedNumber(number: number): boolean {
+    return Spring.RESERVED_NUMBERS.has(number);
+  }
+
   get isDefault(): boolean {
-    return this.number === 1 || this.number === 2;
+    return Spring.isReservedNumber(this.number);
   }
 }
