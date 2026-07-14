@@ -1,10 +1,22 @@
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { BoundaryCondition } from '../models/BoundaryCondition';
 import { FrameDocument } from '../models/FrameDocument';
 import { Material } from '../models/Material';
 import { Member } from '../models/Member';
 import { Node } from '../models/Node';
 import { Section, SectionShape, SectionType } from '../models/Section';
+import {
+  AnalysisGroupMetadata,
+  AnalysisMetadata,
+  EqualDOFConstraintMetadata,
+  JsonValue,
+  LinkElementMetadata,
+  LocalAxisMetadata,
+  NodalMassMetadata,
+  SourceTraceabilityMetadata,
+} from '../models/AnalysisMetadata';
+import { LoadCase, LoadCaseType } from '../models/LoadCase';
+import { LoadCombination, LoadCombinationTerm } from '../models/LoadCombination';
 
 type RawObject = Record<string, unknown>;
 
@@ -15,6 +27,9 @@ export interface FrameYamlImportDiagnostic {
   code: string;
   message: string;
   tag?: number;
+  sourcePath?: string;
+  entityType?: string;
+  details?: Record<string, string | number | boolean | null>;
 }
 
 export interface FrameYamlImportResult {
@@ -43,6 +58,44 @@ function asObject(value: unknown): RawObject {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+export interface FrameYamlExportResult {
+  yaml: string;
+  diagnostics: FrameYamlImportDiagnostic[];
+}
+
+function asEntries(value: unknown): Array<{ key?: string; value: unknown }> {
+  if (Array.isArray(value)) return value.map(item => ({ value: item }));
+  if (value && typeof value === 'object') {
+    return Object.entries(value as RawObject).map(([key, item]) => ({ key, value: item }));
+  }
+  return [];
+}
+
+function toJsonValue(value: unknown): JsonValue | undefined {
+  if (value == null || typeof value === 'string' || typeof value === 'boolean') return value as JsonValue;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : String(value);
+  if (Array.isArray(value)) {
+    return value.map(item => toJsonValue(item) ?? null);
+  }
+  if (typeof value === 'object') {
+    const result: Record<string, JsonValue> = {};
+    for (const [key, item] of Object.entries(value as RawObject)) {
+      const converted = toJsonValue(item);
+      if (converted !== undefined) result[key] = converted;
+    }
+    return result;
+  }
+  return String(value);
+}
+
+function toNumberArray(value: unknown): number[] {
+  return asArray(value).map(item => toNumber(item, NaN)).filter(Number.isFinite);
+}
+
+function toStringArray(value: unknown): string[] {
+  return asArray(value).map(toString_).filter(Boolean);
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -172,6 +225,7 @@ function buildSections(
     const area = toNumber(raw.area);
     section.p1_A = area * areaFactor;
     section.p2_Ix = toNumber(raw.torsion_constant) * secondMomentFactor;
+    section.torsionConstant = section.p2_Ix;
     section.p3_Iy = toNumber(raw.inertia_y) * secondMomentFactor;
     section.p4_Iz = toNumber(raw.inertia_z) * secondMomentFactor;
     section.ky = area === 0 ? 0 : toNumber(raw.shear_area_y) / area;
@@ -284,6 +338,225 @@ function parseSupports(rawSupports: unknown[], nodeMap: Map<number, Node>, diagn
   return boundaries;
 }
 
+function parseLocalAxis(raw: RawObject): LocalAxisMetadata | undefined {
+  const x = toNumberArray(raw.orient_x);
+  const y = toNumberArray(raw.orient_y);
+  const vecxz = toNumberArray(raw.vecxz);
+  if (x.length === 0 && y.length === 0 && vecxz.length === 0) return undefined;
+  return {
+    ...(x.length > 0 ? { x } : {}),
+    ...(y.length > 0 ? { y } : {}),
+    ...(vecxz.length > 0 ? { vecxz } : {}),
+  };
+}
+
+function parseEqualDOFConstraints(rawConstraints: unknown): EqualDOFConstraintMetadata[] {
+  const constraints: EqualDOFConstraintMetadata[] = [];
+  for (const { key, value } of asEntries(rawConstraints)) {
+    const raw = asObject(value);
+    const type = toString_(raw.type || raw.kind);
+    if (type.toLowerCase() !== 'equaldof') continue;
+    const retainedNode = toPositiveInt(
+      raw.retained_node ?? raw.retained_node_tag ?? raw.master_node ?? raw.master_node_tag,
+    );
+    const constrainedNode = toPositiveInt(
+      raw.constrained_node ?? raw.constrained_node_tag ?? raw.slave_node ?? raw.slave_node_tag,
+    );
+    constraints.push({
+      type: 'equalDOF',
+      retainedNode,
+      constrainedNode,
+      dofs: toStringArray(raw.dofs),
+      ...(raw.tag != null || key ? { tag: toPositiveInt(raw.tag) || key } : {}),
+      raw: (toJsonValue(raw) ?? {}) as Record<string, JsonValue>,
+    });
+  }
+  return constraints;
+}
+
+function parseNodalMasses(rawMasses: unknown): NodalMassMetadata[] {
+  return asEntries(rawMasses).map(({ key, value }) => {
+    const raw = asObject(value);
+    const direct = raw.values ?? raw.mass ?? raw.masses;
+    let values = toNumberArray(direct);
+    if (values.length === 0) {
+      values = ['mx', 'my', 'mz', 'mrx', 'mry', 'mrz']
+        .map(field => toNumber(raw[field], NaN))
+        .filter(Number.isFinite);
+    }
+    return {
+      nodeTag: toPositiveInt(raw.node_tag ?? raw.node ?? key),
+      values,
+      raw: (toJsonValue(raw) ?? {}) as Record<string, JsonValue>,
+    };
+  });
+}
+
+function parseLinkMetadata(rawElements: unknown[]): LinkElementMetadata[] {
+  const result: LinkElementMetadata[] = [];
+  for (const value of rawElements) {
+    const raw = asObject(value);
+    if (toString_(raw.type) !== 'twoNodeLink3D') continue;
+    const orientation = parseLocalAxis(raw);
+    result.push({
+      tag: toPositiveInt(raw.tag),
+      nodeI: toPositiveInt(raw.node_i),
+      nodeJ: toPositiveInt(raw.node_j),
+      directions: toStringArray(raw.dir ?? raw.directions),
+      stiffness: toNumberArray(raw.stiffness),
+      ...(orientation ? { orientation } : {}),
+      ...(asArray(raw.shear_dist).length > 0 ? { shearDistance: toNumberArray(raw.shear_dist) } : {}),
+      raw: (toJsonValue(raw) ?? {}) as Record<string, JsonValue>,
+    });
+  }
+  return result;
+}
+
+function parseGroups(rawGroups: unknown): AnalysisGroupMetadata[] {
+  return asEntries(rawGroups).map(({ key, value }, index) => {
+    const raw = asObject(value);
+    return {
+      name: toString_(raw.name) || key || `Group ${index + 1}`,
+      nodeTags: toNumberArray(raw.node_tags ?? raw.nodes).map(Math.trunc),
+      elementTags: toNumberArray(raw.element_tags ?? raw.elements).map(Math.trunc),
+      raw: toJsonValue(value),
+    };
+  });
+}
+
+function parseTraceability(rawTraceability: unknown): SourceTraceabilityMetadata | undefined {
+  if (!rawTraceability || typeof rawTraceability !== 'object') return undefined;
+  const raw = asObject(rawTraceability);
+  return {
+    ...(raw.source != null ? { source: toString_(raw.source) } : {}),
+    ...(raw.generated_by != null ? { generatedBy: toString_(raw.generated_by) } : {}),
+    ...(raw.generated_at != null ? { generatedAt: toString_(raw.generated_at) } : {}),
+    raw: toJsonValue(rawTraceability),
+  };
+}
+
+function collectExtensions(root: RawObject, model: RawObject): Record<string, JsonValue> | undefined {
+  const rootKnown = new Set(['schema_version', 'units', 'model', 'load_cases', 'load_combinations', 'traceability']);
+  const modelKnown = new Set([
+    'name', 'ndm', 'ndf', 'nodes', 'supports', 'materials', 'sections', 'elements',
+    'constraints', 'nodal_masses', 'groups', 'result_extraction', 'traceability',
+  ]);
+  const rootExtra: Record<string, JsonValue> = {};
+  const modelExtra: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(root)) {
+    if (!rootKnown.has(key)) {
+      const converted = toJsonValue(value);
+      if (converted !== undefined) rootExtra[key] = converted;
+    }
+  }
+  for (const [key, value] of Object.entries(model)) {
+    if (!modelKnown.has(key)) {
+      const converted = toJsonValue(value);
+      if (converted !== undefined) modelExtra[key] = converted;
+    }
+  }
+  const extensions: Record<string, JsonValue> = {};
+  if (Object.keys(rootExtra).length > 0) extensions.root = rootExtra;
+  if (Object.keys(modelExtra).length > 0) extensions.model = modelExtra;
+  return Object.keys(extensions).length > 0 ? extensions : undefined;
+}
+
+function buildAnalysisMetadata(
+  root: RawObject,
+  model: RawObject,
+  schemaVersion: string,
+  units: RawObject,
+  rawElements: unknown[],
+): AnalysisMetadata {
+  const unitStrings: Record<string, string> = {};
+  for (const [key, value] of Object.entries(units)) unitStrings[key] = toString_(value);
+  const localAxes: Record<string, LocalAxisMetadata> = {};
+  for (const value of rawElements) {
+    const raw = asObject(value);
+    const axis = parseLocalAxis(raw);
+    const tag = toPositiveInt(raw.tag);
+    if (axis && tag) localAxes[String(tag)] = axis;
+  }
+  const traceability = parseTraceability(model.traceability ?? root.traceability);
+  const extensions = collectExtensions(root, model);
+  return {
+    sourceFormat: 'analysis-yaml',
+    schemaVersion,
+    units: unitStrings,
+    ndm: toPositiveInt(model.ndm) || undefined,
+    ndf: toPositiveInt(model.ndf) || undefined,
+    constraints: parseEqualDOFConstraints(model.constraints),
+    nodalMasses: parseNodalMasses(model.nodal_masses),
+    linkElements: parseLinkMetadata(rawElements),
+    localAxes,
+    groups: parseGroups(model.groups),
+    ...(model.result_extraction != null ? { resultExtraction: toJsonValue(model.result_extraction) } : {}),
+    ...(traceability ? { traceability } : {}),
+    ...(extensions ? { extensions } : {}),
+  };
+}
+
+function parseYamlLoadCases(rawLoadCases: unknown): LoadCase[] {
+  const cases: LoadCase[] = [];
+  const usedIds = new Set<string>();
+  for (const [{ key, value }, index] of asEntries(rawLoadCases).map((entry, index) => [entry, index] as const)) {
+    const raw = asObject(value);
+    let id = toString_(raw.id ?? raw.load_case_id ?? raw.tag ?? key).trim() || `LC${index + 1}`;
+    if (usedIds.has(id)) {
+      let serial = index + 1;
+      while (usedIds.has(`LC${serial}`)) serial++;
+      id = `LC${serial}`;
+    }
+    usedIds.add(id);
+    cases.push(new LoadCase(
+      id,
+      toString_(raw.name ?? key).trim() || `Load Case ${index + 1}`,
+      toString_(raw.type ?? raw.category).trim() || LoadCaseType.Other,
+      toString_(raw.memo ?? raw.description),
+    ));
+  }
+  return cases.length > 0 ? cases : [new LoadCase('LC1', 'Load Case 1')];
+}
+
+function parseCombinationTerms(value: unknown, caseIdByName: Map<string, string>): LoadCombinationTerm[] {
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      const raw = asObject(item);
+      const reference = toString_(raw.loadCaseId ?? raw.load_case_id ?? raw.load_case ?? raw.case ?? raw.name);
+      return {
+        loadCaseId: caseIdByName.get(reference) ?? reference,
+        factor: toNumber(raw.factor ?? raw.scale),
+      };
+    });
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as RawObject).map(([reference, factor]) => ({
+      loadCaseId: caseIdByName.get(reference) ?? reference,
+      factor: toNumber(factor),
+    }));
+  }
+  return [];
+}
+
+function parseYamlLoadCombinations(rawCombinations: unknown, loadCases: LoadCase[]): LoadCombination[] {
+  const byName = new Map<string, string>();
+  for (const loadCase of loadCases) {
+    byName.set(loadCase.id, loadCase.id);
+    byName.set(loadCase.name, loadCase.id);
+  }
+  return asEntries(rawCombinations).map(({ key, value }, index) => {
+    const raw = asObject(value);
+    const id = toString_(raw.id ?? key).trim() || `COMB${index + 1}`;
+    const termsSource = raw.terms ?? raw.factors ?? raw.components;
+    return new LoadCombination(
+      id,
+      toString_(raw.name ?? key).trim() || `Combination ${index + 1}`,
+      parseCombinationTerms(termsSource, byName),
+      toString_(raw.memo ?? raw.description),
+    );
+  });
+}
+
 function nodeDistanceCm(iNode: Node, jNode: Node): number {
   const dx = iNode.x - jNode.x;
   const dy = iNode.y - jNode.y;
@@ -362,7 +635,12 @@ function parseElements(
       } else if (length <= SHORT_LINK_WARNING_CM) {
         diagnostics.push(makeDiagnostic('warn', 'short_link_element', `twoNodeLink3D element ${tag} is very short (${length.toFixed(6)} cm).`, tag));
       }
-      diagnostics.push(makeDiagnostic('warn', 'link_metadata_not_preserved', `twoNodeLink3D element ${tag} is imported as a display member; stiffness/orientation metadata is not saved in JSON.`, tag));
+      diagnostics.push(makeDiagnostic(
+        'info',
+        'link_metadata_preserved',
+        `twoNodeLink3D element ${tag} is imported as a display member; stiffness/orientation metadata is retained in analysisMetadata.`,
+        tag,
+      ));
     } else {
       diagnostics.push(makeDiagnostic('warn', 'unsupported_element_type', `Element ${tag} has unsupported type "${type}" and was skipped.`, tag));
       skippedElementCount++;
@@ -380,9 +658,9 @@ function parseElements(
   return { members, skippedElementCount };
 }
 
-function assignLoadCaseDefaults(nodes: Node[], members: Member[]): void {
-  for (const node of nodes) node.setLoadCaseCount(1);
-  for (const member of members) member.setLoadCaseCount(1);
+function assignLoadCaseDefaults(nodes: Node[], members: Member[], count: number): void {
+  for (const node of nodes) node.setLoadCaseCount(count);
+  for (const member of members) member.setLoadCaseCount(count);
 }
 
 function appendImportMemo(doc: FrameDocument, result: FrameYamlImportResult): void {
@@ -395,7 +673,7 @@ function appendImportMemo(doc: FrameDocument, result: FrameYamlImportResult): vo
     `skippedElements=${result.skippedElementCount}`,
     `warnings=${warnCount}`,
     `errors=${errorCount}`,
-    'unsupported=constraints,nodal_masses,groups,result_extraction,traceability,link_metadata',
+    'analysisMetadata=constraints,nodal_masses,groups,result_extraction,traceability,link_metadata',
   ];
 }
 
@@ -477,8 +755,11 @@ export function parseFrameAnalysisYaml(text: string, doc: FrameDocument): FrameY
     diagnostics,
   );
   const boundaries = parseSupports(rawSupports, nodeMap, diagnostics);
+  const loadCases = parseYamlLoadCases(root.load_cases);
+  const loadCombinations = parseYamlLoadCombinations(root.load_combinations, loadCases);
+  const analysisMetadata = buildAnalysisMetadata(root, model, schemaVersion, units, rawElements);
 
-  assignLoadCaseDefaults(nodes, members);
+  assignLoadCaseDefaults(nodes, members, loadCases.length);
 
   const result: FrameYamlImportResult = {
     diagnostics,
@@ -487,19 +768,29 @@ export function parseFrameAnalysisYaml(text: string, doc: FrameDocument): FrameY
     skippedElementCount,
   };
 
-  doc.init();
-  doc.title = toString_(model.name);
-  doc.nodes = nodes;
-  doc.materials = materials;
-  doc.sections = sectionResult.sections;
-  doc.members = members;
-  doc.boundaries = boundaries;
-  for (const boundary of doc.boundaries) {
+  const imported = new FrameDocument();
+  imported.title = toString_(model.name);
+  imported.nodes = nodes;
+  imported.materials = materials;
+  imported.sections = sectionResult.sections;
+  imported.members = members;
+  imported.boundaries = boundaries;
+  imported.loadCases = loadCases;
+  imported.loadCaseCount = loadCases.length;
+  imported.loadCombinations = loadCombinations;
+  imported.analysisMetadata = analysisMetadata;
+  for (const boundary of imported.boundaries) {
     const node = nodeMap.get(boundary.nodeNumber);
     if (node) node.boundaryCondition = boundary;
   }
-  appendImportMemo(doc, result);
-  doc.notifyChange();
+  appendImportMemo(imported, result);
+  doc.replaceWith(imported);
+
+  diagnostics.push(makeDiagnostic(
+    'info',
+    'analysis_metadata_preserved',
+    `Preserved ${analysisMetadata.constraints.length} constraints, ${analysisMetadata.nodalMasses.length} nodal masses, ${analysisMetadata.linkElements.length} links and ${analysisMetadata.groups.length} groups.`,
+  ));
 
   diagnostics.push(makeDiagnostic(
     'info',
@@ -508,4 +799,201 @@ export function parseFrameAnalysisYaml(text: string, doc: FrameDocument): FrameY
   ));
 
   return result;
+}
+
+function uniqueReferenceName(base: string, used: Set<string>, fallback: string): string {
+  let candidate = base.trim() || fallback;
+  let suffix = 2;
+  while (used.has(candidate)) candidate = `${base.trim() || fallback}_${suffix++}`;
+  used.add(candidate);
+  return candidate;
+}
+
+/**
+ * FrameDocumentを解析YAMLへ再出力する。analysisMetadataの型付き情報とraw拡張を優先して復元する。
+ */
+export function exportFrameAnalysisYaml(doc: FrameDocument): FrameYamlExportResult {
+  const diagnostics: FrameYamlImportDiagnostic[] = [];
+  const metadata = doc.analysisMetadata;
+  const units: Record<string, string> = {
+    length: 'mm',
+    force: 'N',
+    stress: 'N/mm^2',
+    area: 'mm^2',
+    second_moment: 'mm^4',
+    translational_stiffness: 'N/mm',
+    rotational_stiffness: 'N*mm/rad',
+    ...(metadata?.units ?? {}),
+  };
+  if (units.length !== 'mm' || units.stress !== 'N/mm^2' || units.area !== 'mm^2' || units.second_moment !== 'mm^4') {
+    throw new Error('Analysis YAML export currently requires mm/N/mm^2/mm^4 units.');
+  }
+
+  const materialRefs = new Map<number, string>();
+  const materialObject: RawObject = {};
+  const usedMaterialRefs = new Set<string>();
+  for (const material of doc.materials) {
+    const ref = uniqueReferenceName(material.name, usedMaterialRefs, `material_${material.number}`);
+    materialRefs.set(material.number, ref);
+    materialObject[ref] = {
+      type: 'ElasticMaterial',
+      tag: material.number,
+      elastic_modulus: material.young * 10,
+      shear_modulus: material.shear * 10,
+      poisson: material.poisson,
+    };
+  }
+
+  const sectionRefs = new Map<number, string>();
+  const sectionObject: RawObject = {};
+  const usedSectionRefs = new Set<string>();
+  for (const section of doc.sections) {
+    const ref = uniqueReferenceName(section.comment, usedSectionRefs, `section_${section.number}`);
+    sectionRefs.set(section.number, ref);
+    sectionObject[ref] = {
+      area: section.p1_A * 100,
+      torsion_constant: section.torsionConstant * 10000,
+      inertia_y: section.p3_Iy * 10000,
+      inertia_z: section.p4_Iz * 10000,
+      shear_area_y: section.p1_A * section.ky * 100,
+      shear_area_z: section.p1_A * section.kz * 100,
+    };
+  }
+
+  const linkByTag = new Map((metadata?.linkElements ?? []).map(link => [link.tag, link] as const));
+  const exportedLinkTags = new Set<number>();
+  const elements: RawObject[] = [];
+  for (const member of doc.members) {
+    const link = linkByTag.get(member.number);
+    if (link) {
+      const raw = asObject(link.raw);
+      elements.push({
+        ...raw,
+        type: 'twoNodeLink3D',
+        tag: member.number,
+        node_i: member.iNodeNumber,
+        node_j: member.jNodeNumber,
+        dir: [...link.directions],
+        stiffness: [...link.stiffness],
+        ...(link.orientation?.x ? { orient_x: [...link.orientation.x] } : {}),
+        ...(link.orientation?.y ? { orient_y: [...link.orientation.y] } : {}),
+        ...(link.shearDistance ? { shear_dist: [...link.shearDistance] } : {}),
+      });
+      exportedLinkTags.add(link.tag);
+      continue;
+    }
+    const section = doc.findSectionByNumber(member.sectionNumber);
+    const localAxis = metadata?.localAxes[String(member.number)];
+    elements.push({
+      type: section?.type === SectionType.Truss ? 'truss3D' : 'elasticTimoshenkoBeam3D',
+      tag: member.number,
+      node_i: member.iNodeNumber,
+      node_j: member.jNodeNumber,
+      ...(section ? { section_ref: sectionRefs.get(section.number) } : {}),
+      ...(section?.materialNumber ? { material_ref: materialRefs.get(section.materialNumber) } : {}),
+      ...(localAxis?.vecxz ? { vecxz: [...localAxis.vecxz] } : {}),
+      ...(localAxis?.x ? { orient_x: [...localAxis.x] } : {}),
+      ...(localAxis?.y ? { orient_y: [...localAxis.y] } : {}),
+    });
+  }
+  for (const link of metadata?.linkElements ?? []) {
+    if (exportedLinkTags.has(link.tag)) continue;
+    elements.push({
+      ...asObject(link.raw),
+      type: 'twoNodeLink3D',
+      tag: link.tag,
+      node_i: link.nodeI,
+      node_j: link.nodeJ,
+      dir: [...link.directions],
+      stiffness: [...link.stiffness],
+    });
+    diagnostics.push(makeDiagnostic('warn', 'orphan_link_metadata_exported', `Link metadata ${link.tag} has no display member and was exported from metadata.`, link.tag));
+  }
+
+  const constraints = (metadata?.constraints ?? []).map(constraint => ({
+    ...asObject(constraint.raw),
+    type: 'equalDOF',
+    ...(constraint.tag != null ? { tag: constraint.tag } : {}),
+    retained_node: constraint.retainedNode,
+    constrained_node: constraint.constrainedNode,
+    dofs: [...constraint.dofs],
+  }));
+  const nodalMasses = (metadata?.nodalMasses ?? []).map(mass => ({
+    ...asObject(mass.raw),
+    node_tag: mass.nodeTag,
+    values: [...mass.values],
+  }));
+  const groups = (metadata?.groups ?? []).map(group => ({
+    ...asObject(group.raw),
+    name: group.name,
+    node_tags: [...group.nodeTags],
+    element_tags: [...group.elementTags],
+  }));
+
+  const modelExtensions = asObject(metadata?.extensions?.model);
+  const model: RawObject = {
+    ...modelExtensions,
+    name: doc.title,
+    ndm: metadata?.ndm ?? 3,
+    ndf: metadata?.ndf ?? 6,
+    nodes: doc.nodes.map(node => ({ tag: node.number, x: node.x * 10, y: node.y * 10, z: node.z * 10 })),
+    supports: doc.boundaries.map(boundary => ({
+      node_tag: boundary.nodeNumber,
+      dofs: [
+        boundary.deltaX ? 'ux' : null,
+        boundary.deltaY ? 'uy' : null,
+        boundary.deltaZ ? 'uz' : null,
+        boundary.thetaX ? 'rx' : null,
+        boundary.thetaY ? 'ry' : null,
+        boundary.thetaZ ? 'rz' : null,
+      ].filter((value): value is string => value !== null),
+    })),
+    materials: materialObject,
+    sections: sectionObject,
+    elements,
+    ...(constraints.length > 0 ? { constraints } : {}),
+    ...(nodalMasses.length > 0 ? { nodal_masses: nodalMasses } : {}),
+    ...(groups.length > 0 ? { groups } : {}),
+    ...(metadata?.resultExtraction !== undefined ? { result_extraction: metadata.resultExtraction } : {}),
+    ...(metadata?.traceability ? {
+      traceability: {
+        ...asObject(metadata.traceability.raw),
+        ...(metadata.traceability.source ? { source: metadata.traceability.source } : {}),
+        ...(metadata.traceability.generatedBy ? { generated_by: metadata.traceability.generatedBy } : {}),
+        ...(metadata.traceability.generatedAt ? { generated_at: metadata.traceability.generatedAt } : {}),
+      },
+    } : {}),
+  };
+
+  const rootExtensions = asObject(metadata?.extensions?.root);
+  const root: RawObject = {
+    ...rootExtensions,
+    schema_version: metadata?.schemaVersion || '1',
+    units,
+    model,
+    load_cases: doc.loadCases.map(loadCase => ({
+      id: loadCase.id,
+      name: loadCase.name,
+      type: loadCase.type,
+      memo: loadCase.memo,
+    })),
+    load_combinations: doc.loadCombinations.map(combination => ({
+      id: combination.id,
+      name: combination.name,
+      memo: combination.memo,
+      terms: combination.terms.map(term => ({ load_case_id: term.loadCaseId, factor: term.factor })),
+    })),
+  };
+
+  if (doc.walls.length > 0) diagnostics.push(makeDiagnostic('warn', 'walls_not_supported_by_analysis_yaml', `${doc.walls.length} wall(s) are not represented by the analysis YAML schema.`));
+  if (doc.springs.length > 0) diagnostics.push(makeDiagnostic('warn', 'member_end_springs_not_supported_by_analysis_yaml', `${doc.springs.length} custom member-end spring(s) are not represented by the analysis YAML schema.`));
+  const hasLoads = doc.nodes.some(node => node.loads.some(load => !load.isZero))
+    || doc.members.some(member => member.memberLoads.some(load => !load.isZero) || member.cmqLoads.some(load => !load.isZero));
+  if (hasLoads) diagnostics.push(makeDiagnostic('warn', 'loads_not_supported_by_analysis_yaml_export', 'FrameModelMaker node/member/CMQ load values are not represented by the current analysis YAML load schema.'));
+
+  return { yaml: stringifyYaml(root), diagnostics };
+}
+
+export function writeFrameAnalysisYaml(doc: FrameDocument): string {
+  return exportFrameAnalysisYaml(doc).yaml;
 }

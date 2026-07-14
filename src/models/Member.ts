@@ -20,6 +20,10 @@ export class Member {
   selected: boolean = false;
   isShown: boolean = true;
 
+  constructor(loadCaseCount: number = 1) {
+    this.setLoadCaseCount(Math.max(1, Math.trunc(loadCaseCount)));
+  }
+
   getMemberLoad(caseIndex: number): MemberLoad {
     while (this.memberLoads.length <= caseIndex) {
       this.memberLoads.push(new MemberLoad());
@@ -35,6 +39,7 @@ export class Member {
   }
 
   setLoadCaseCount(count: number): void {
+    count = Math.max(1, Math.trunc(count));
     while (this.memberLoads.length < count) {
       this.memberLoads.push(new MemberLoad());
     }

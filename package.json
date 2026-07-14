@@ -1,7 +1,7 @@
 {
   "name": "framemodelmaker-web",
-  "version": "1.0.1",
-  "description": "",
+  "version": "1.1.0",
+  "description": "Browser-based editor, validator, visualizer, and interchange tool for 3D frame analysis models",
   "main": "index.js",
   "scripts": {
     "dev": "vite",
@@ -9,21 +9,33 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "audit": "npm audit --audit-level=high",
     "typecheck": "tsc --noEmit -p tsconfig.check.json"
   },
-  "keywords": [],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "keywords": [
+    "structural-engineering",
+    "frame-model",
+    "three.js",
+    "finite-element"
+  ],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "three": "^0.182.0",
+    "three": "^0.185.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@types/node": "^25.2.3",
-    "@types/three": "^0.182.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "@types/node": "^22.20.0",
+    "@types/three": "^0.185.1",
+    "jsdom": "^26.1.0",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1",
-    "vitest": "^3.0.0"
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
   }
 }

@@ -17,10 +17,11 @@ export class Node {
   selected: boolean = false;
   isShown: boolean = true;
 
-  constructor(x: number = 0, y: number = 0, z: number = 0) {
+  constructor(x: number = 0, y: number = 0, z: number = 0, loadCaseCount: number = 1) {
     this.x = x;
     this.y = y;
     this.z = z;
+    this.setLoadCaseCount(Math.max(1, Math.trunc(loadCaseCount)));
   }
 
   getLoad(caseIndex: number): NodeLoad {
@@ -31,6 +32,7 @@ export class Node {
   }
 
   setLoadCaseCount(count: number): void {
+    count = Math.max(1, Math.trunc(count));
     while (this.loads.length < count) {
       this.loads.push(new NodeLoad());
     }

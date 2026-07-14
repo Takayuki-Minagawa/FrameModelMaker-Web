@@ -3,95 +3,176 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <title>FrameModelMaker-Web v1.0.1</title>
+  <meta name="theme-color" content="#203247">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <title>FrameModelMaker-Web v1.1.0</title>
 </head>
 <body>
-  <!-- メニューバー -->
-  <div id="menu-bar">
-    <div class="menu-item">
-      <span data-i18n="menu.file"></span>
+  <header id="menu-bar" data-i18n-aria="aria.applicationMenu">
+    <details class="menu-item">
+      <summary data-i18n="menu.file"></summary>
       <div class="menu-dropdown">
-        <div id="menu-new" data-i18n="menu.new"></div>
-        <div id="menu-open" data-i18n="menu.open"></div>
-        <div id="menu-save" data-i18n="menu.save"></div>
-        <div class="separator"></div>
-        <div id="menu-sample" data-i18n="menu.sample"></div>
+        <button id="menu-new" type="button" data-i18n="menu.new"></button>
+        <button id="menu-open" type="button" data-i18n="menu.open"></button>
+        <button id="menu-save" type="button" data-i18n="menu.save"></button>
+        <button id="menu-export-yaml" type="button" data-i18n="menu.exportYaml"></button>
+        <button id="menu-export-csv" type="button" data-i18n="menu.exportCsv"></button>
+        <span class="separator" aria-hidden="true"></span>
+        <button id="menu-sample" type="button" data-i18n="menu.sample"></button>
       </div>
-    </div>
-    <div class="menu-item">
-      <span data-i18n="menu.view"></span>
-      <div class="menu-dropdown">
-        <div id="menu-show-node-num" data-i18n="menu.showNodeNum"></div>
-        <div id="menu-show-member-num" data-i18n="menu.showMemberNum"></div>
-      </div>
-    </div>
-    <div class="menu-item">
-      <span data-i18n="menu.edit"></span>
-      <div class="menu-dropdown">
-        <div id="menu-sort" data-i18n="menu.sort"></div>
-        <div id="menu-renumber" data-i18n="menu.renumber"></div>
-        <div id="menu-merge" data-i18n="menu.merge"></div>
-      </div>
-    </div>
-    <div class="menu-item">
-      <span data-i18n="menu.loadcase"></span>
-      <div class="menu-dropdown">
-        <div id="menu-add-loadcase" data-i18n="menu.addLoadcase"></div>
-        <div id="menu-remove-loadcase" data-i18n="menu.removeLoadcase"></div>
-        <div class="separator"></div>
-        <div style="padding:4px 16px;">
-          <select id="load-case-selector">
-            <option value="0">Load Case 1</option>
-          </select>
-        </div>
-      </div>
-    </div>
+    </details>
 
-    <!-- 右端ボタン群 -->
+    <details class="menu-item">
+      <summary data-i18n="menu.view"></summary>
+      <div class="menu-dropdown">
+        <button id="menu-fit" type="button" data-i18n="view.fit"></button>
+        <button id="menu-view-top" type="button" data-i18n="view.top"></button>
+        <button id="menu-view-front" type="button" data-i18n="view.front"></button>
+        <button id="menu-view-side" type="button" data-i18n="view.side"></button>
+        <button id="menu-view-iso" type="button" data-i18n="view.iso"></button>
+        <button id="menu-projection" type="button" data-i18n="view.projection"></button>
+        <span class="separator" aria-hidden="true"></span>
+        <button id="menu-show-node-num" type="button" data-i18n="menu.showNodeNum"></button>
+        <button id="menu-show-member-num" type="button" data-i18n="menu.showMemberNum"></button>
+        <button id="menu-show-wall-num" type="button" data-i18n="menu.showWallNum"></button>
+        <button id="menu-toggle-loads" type="button" data-i18n="view.loads"></button>
+        <button id="menu-toggle-boundaries" type="button" data-i18n="view.boundaries"></button>
+      </div>
+    </details>
+
+    <details class="menu-item">
+      <summary data-i18n="menu.edit"></summary>
+      <div class="menu-dropdown">
+        <button id="menu-undo" type="button" data-i18n="edit.undo"></button>
+        <button id="menu-redo" type="button" data-i18n="edit.redo"></button>
+        <span class="separator" aria-hidden="true"></span>
+        <button id="menu-sort" type="button" data-i18n="menu.sort"></button>
+        <button id="menu-renumber" type="button" data-i18n="menu.renumber"></button>
+        <button id="menu-merge" type="button" data-i18n="menu.merge"></button>
+        <button id="menu-duplicate" type="button" data-i18n="edit.duplicate"></button>
+      </div>
+    </details>
+
+    <details class="menu-item">
+      <summary data-i18n="menu.loadcase"></summary>
+      <div class="menu-dropdown">
+        <button id="menu-add-loadcase" type="button" data-i18n="menu.addLoadcase"></button>
+        <button id="menu-copy-loadcase" type="button" data-i18n="loadcase.copy"></button>
+        <button id="menu-remove-loadcase" type="button" data-i18n="menu.removeLoadcase"></button>
+        <button id="menu-load-combinations" type="button" data-i18n="loadcase.combinations"></button>
+        <span class="separator" aria-hidden="true"></span>
+        <label class="menu-field" for="load-case-selector" data-i18n="loadcase.current"></label>
+        <select id="load-case-selector">
+          <option value="0">Load Case 1</option>
+        </select>
+      </div>
+    </details>
+
+    <details class="menu-item">
+      <summary data-i18n="menu.tools"></summary>
+      <div class="menu-dropdown">
+        <button id="menu-validate" type="button" data-i18n="tools.validate"></button>
+        <button id="menu-model-info" type="button" data-i18n="tools.modelInfo"></button>
+        <button id="menu-section-calculator" type="button" data-i18n="tools.sectionCalculator"></button>
+        <button id="menu-import-report" type="button" data-i18n="tools.importReport"></button>
+        <button id="menu-results" type="button" data-i18n="tools.results"></button>
+      </div>
+    </details>
+
     <div id="menu-right">
-      <button id="btn-theme" title="Theme"></button>
-      <button id="btn-lang" title="Language"></button>
-      <button id="btn-help" title="Help">?</button>
+      <span id="dirty-indicator" class="hidden" data-i18n="status.unsaved"></span>
+      <button id="btn-theme" type="button" title="Theme"></button>
+      <button id="btn-lang" type="button" title="Language"></button>
+      <button id="btn-help" type="button" title="Help" aria-haspopup="dialog">?</button>
     </div>
-  </div>
+  </header>
 
-  <!-- メインコンテンツ -->
-  <div id="main-content">
-    <div id="viewer-panel">
-      <div id="selection-info-panel" class="hidden">
+  <main id="main-content">
+    <section id="viewer-panel" data-i18n-aria="aria.viewer">
+      <nav id="viewer-toolbar" data-i18n-aria="aria.viewControls">
+        <button id="view-fit" type="button" data-i18n-title="view.fit" aria-label="Fit">⌂</button>
+        <button id="view-top" type="button" data-i18n-title="view.top">Z</button>
+        <button id="view-front" type="button" data-i18n-title="view.front">Y</button>
+        <button id="view-side" type="button" data-i18n-title="view.side">X</button>
+        <button id="view-iso" type="button" data-i18n-title="view.iso">◇</button>
+        <button id="view-projection" type="button" data-i18n-title="view.projection">P</button>
+        <span class="toolbar-separator" aria-hidden="true"></span>
+        <button id="view-plane" type="button" data-i18n-title="view.plane">2D</button>
+        <button id="view-elevation-x" type="button" data-i18n-title="view.elevationX">EX</button>
+        <button id="view-elevation-y" type="button" data-i18n-title="view.elevationY">EY</button>
+        <button id="view-draw-node" type="button" data-i18n-title="draw.node">●+</button>
+        <button id="view-draw-member" type="button" data-i18n-title="draw.member">╱+</button>
+        <button id="view-move" type="button" data-i18n-title="draw.move">↔</button>
+        <button id="view-duplicate" type="button" data-i18n-title="draw.duplicate">⧉</button>
+        <span class="toolbar-separator" aria-hidden="true"></span>
+        <button id="view-loads" type="button" data-i18n-title="view.loads">⇢</button>
+        <button id="view-results" type="button" data-i18n-title="tools.results">∿</button>
+      </nav>
+
+      <div id="drawing-hint" class="viewer-hint hidden" role="status"></div>
+
+      <aside id="selection-info-panel" class="hidden" aria-labelledby="selection-info-title">
         <div id="selection-info-header">
           <span id="selection-info-title"></span>
-          <button id="selection-info-close" type="button">&times;</button>
+          <button id="selection-info-close" type="button" data-i18n-aria="selection.close">&times;</button>
         </div>
         <div id="selection-info-body"></div>
-      </div>
-    </div>
-    <div id="resize-handle"></div>
-    <div id="data-panel">
-      <div id="tab-bar"></div>
+      </aside>
+
+      <aside id="tool-panel" class="hidden" aria-labelledby="tool-panel-title">
+        <div class="panel-header">
+          <span id="tool-panel-title"></span>
+          <button id="tool-panel-close" type="button" data-i18n-aria="selection.close">&times;</button>
+        </div>
+        <div id="tool-panel-body"></div>
+      </aside>
+    </section>
+
+    <button id="resize-handle" type="button" data-i18n-aria="aria.resizeData" aria-orientation="vertical"></button>
+
+    <section id="data-panel" data-i18n-aria="aria.modelData">
+      <div id="tab-bar" role="tablist" data-i18n-aria="aria.dataCategories"></div>
       <div id="grid-toolbar">
         <span id="toolbar-label" data-i18n="toolbar.dataEdit"></span>
+        <label class="search-box">
+          <span class="sr-only" data-i18n="toolbar.search"></span>
+          <input id="grid-search" type="search" data-i18n-placeholder="toolbar.search" autocomplete="off">
+        </label>
+        <button id="btn-copy-grid" class="toolbar-btn secondary" type="button" data-i18n="toolbar.copy"></button>
+        <button id="btn-paste-grid" class="toolbar-btn secondary" type="button" data-i18n="toolbar.paste"></button>
       </div>
-      <div id="grid-container"></div>
-    </div>
-  </div>
+      <div id="grid-container" role="tabpanel"></div>
+    </section>
+  </main>
 
-  <!-- ヘルプダイアログ -->
-  <div id="help-overlay" class="hidden">
-    <div id="help-dialog">
+  <div id="help-overlay" class="hidden" role="presentation">
+    <section id="help-dialog" role="dialog" aria-modal="true" aria-labelledby="help-title" tabindex="-1">
       <div id="help-header">
         <span id="help-title"></span>
-        <button id="help-close">&times;</button>
+        <button id="help-close" type="button" data-i18n-aria="selection.close">&times;</button>
       </div>
       <div id="help-body"></div>
-    </div>
+    </section>
   </div>
 
-  <!-- ステータスバー -->
-  <div id="status-bar">
-    <span id="status-text"></span>
-  </div>
+  <dialog id="app-dialog" aria-labelledby="app-dialog-title">
+    <form method="dialog">
+      <header class="dialog-header">
+        <h2 id="app-dialog-title"></h2>
+        <button type="button" value="cancel" data-dialog-cancel class="icon-button" data-i18n-aria="selection.close">&times;</button>
+      </header>
+      <div id="app-dialog-body" class="dialog-body"></div>
+      <footer id="app-dialog-actions" class="dialog-actions">
+        <button type="button" value="cancel" data-dialog-cancel class="secondary" data-i18n="dialog.cancel"></button>
+        <button id="app-dialog-confirm" type="submit" value="confirm" data-i18n="dialog.confirm"></button>
+      </footer>
+    </form>
+  </dialog>
+
+  <footer id="status-bar">
+    <span id="status-text" role="status" aria-live="polite"></span>
+    <span id="model-summary" aria-live="polite"></span>
+  </footer>
 
   <script type="module" src="/src/main.ts"></script>
 </body>

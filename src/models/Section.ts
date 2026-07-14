@@ -23,7 +23,10 @@ export class Section {
   type: SectionType = SectionType.Horizontal;
   shape: SectionShape = SectionShape.DirectInput;
   p1_A: number = 0;   // 断面積 (cm^2)
-  p2_Ix: number = 0;  // 断面二次モーメント Ix
+  /** @deprecated 旧形式でねじり定数として使われていた値。互換性のため保持する。 */
+  p2_Ix: number = 0;
+  /** ねじり定数 J (cm^4)。formatVersion 2 以降の正式フィールド。 */
+  torsionConstant: number = 0;
   p3_Iy: number = 0;
   p4_Iz: number = 0;
   ky: number = 0;      // せん断面積比

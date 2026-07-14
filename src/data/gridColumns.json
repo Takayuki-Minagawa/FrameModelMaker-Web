@@ -36,6 +36,7 @@
     { "key": "shape", "width": "40px", "type": "int" },
     { "key": "p1_A", "width": "90px", "type": "number" },
     { "key": "p2_Ix", "width": "90px", "type": "number" },
+    { "key": "torsionConstant", "width": "90px", "type": "number" },
     { "key": "p3_Iy", "width": "90px", "type": "number" },
     { "key": "p4_Iz", "width": "90px", "type": "number" },
     { "key": "ky", "width": "50px", "type": "number" },
