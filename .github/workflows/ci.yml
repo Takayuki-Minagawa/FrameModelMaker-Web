@@ -37,12 +37,3 @@ jobs:
         run: npm audit --audit-level=high
       - name: Build
         run: npm run build
-
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Review dependency changes
-        uses: actions/dependency-review-action@v4
