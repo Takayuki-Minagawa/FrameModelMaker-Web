@@ -1,5 +1,5 @@
 import { FrameDocument } from '../models/FrameDocument';
-import { parseFrameJson, writeFrameJson } from '../io/FrameJson';
+import { parseFrameJson, toFrameJson, writeFrameJson } from '../io/FrameJson';
 
 export interface DocumentHistoryOptions {
   maxEntries?: number;
@@ -34,14 +34,18 @@ export interface AsyncKeyValueStorage {
   removeItem(key: string): Promise<void>;
 }
 
-function comparableSnapshot(snapshot: string): string {
-  const value = JSON.parse(snapshot) as Record<string, unknown>;
-  delete value.loadCaseIndex;
-  return JSON.stringify(value);
+function prepareDocumentSnapshot(document: FrameDocument): {
+  value: ReturnType<typeof toFrameJson>;
+  comparisonKey: string;
+} {
+  const value = toFrameJson(document);
+  const comparableValue = { ...value } as unknown as Record<string, unknown>;
+  delete comparableValue.loadCaseIndex;
+  return { value, comparisonKey: JSON.stringify(comparableValue) };
 }
 
-function snapshotsMatch(left: string, right: string): boolean {
-  return comparableSnapshot(left) === comparableSnapshot(right);
+function serializePreparedSnapshot(prepared: ReturnType<typeof prepareDocumentSnapshot>): string {
+  return JSON.stringify(prepared.value, null, 2);
 }
 
 export class DocumentHistory {
@@ -50,7 +54,9 @@ export class DocumentHistory {
   private readonly trackChanges: boolean;
   private entries: DocumentHistoryEntry[];
   private currentIndex = 0;
+  private currentEntryComparisonKey: string;
   private savedSnapshot: string;
+  private savedComparisonKey: string;
   private restoring = false;
   private transactionDepth = 0;
   private transactionLabel = 'Edit';
@@ -61,9 +67,16 @@ export class DocumentHistory {
     this.document = document;
     this.maxEntries = Math.max(2, Math.trunc(options.maxEntries ?? 100));
     this.trackChanges = options.trackChanges ?? true;
-    const snapshot = writeFrameJson(document);
-    this.entries = [{ snapshot, label: 'Initial state', timestamp: Date.now() }];
+    const prepared = prepareDocumentSnapshot(document);
+    const snapshot = serializePreparedSnapshot(prepared);
+    this.entries = [{
+      snapshot,
+      label: 'Initial state',
+      timestamp: Date.now(),
+    }];
+    this.currentEntryComparisonKey = prepared.comparisonKey;
     this.savedSnapshot = snapshot;
+    this.savedComparisonKey = prepared.comparisonKey;
     this.changeListener = () => {
       if (this.restoring || !this.trackChanges) return;
       if (this.transactionDepth > 0) return;
@@ -85,7 +98,7 @@ export class DocumentHistory {
   }
 
   get isDirty(): boolean {
-    return !snapshotsMatch(writeFrameJson(this.document), this.savedSnapshot);
+    return prepareDocumentSnapshot(this.document).comparisonKey !== this.savedComparisonKey;
   }
 
   get length(): number {
@@ -97,14 +110,14 @@ export class DocumentHistory {
   }
 
   getEntries(): readonly DocumentHistoryEntry[] {
-    return this.entries.map(entry => ({ ...entry }));
+    return this.entries.map(({ snapshot, label, timestamp }) => ({ snapshot, label, timestamp }));
   }
 
   /** 現在状態を履歴へ追加。同一スナップショットは追加しない。 */
   capture(label: string = 'Edit'): boolean {
-    const snapshot = writeFrameJson(this.document);
-    const currentSnapshot = this.entries[this.currentIndex]?.snapshot;
-    if (currentSnapshot && snapshotsMatch(snapshot, currentSnapshot)) return false;
+    const prepared = prepareDocumentSnapshot(this.document);
+    if (prepared.comparisonKey === this.currentEntryComparisonKey) return false;
+    const snapshot = serializePreparedSnapshot(prepared);
     this.entries.splice(this.currentIndex + 1);
     this.entries.push({ snapshot, label, timestamp: Date.now() });
     if (this.entries.length > this.maxEntries) {
@@ -112,6 +125,7 @@ export class DocumentHistory {
       this.entries.splice(0, removeCount);
     }
     this.currentIndex = this.entries.length - 1;
+    this.currentEntryComparisonKey = prepared.comparisonKey;
     return true;
   }
 
@@ -172,6 +186,7 @@ export class DocumentHistory {
         Math.max(0, this.document.loadCaseCount - 1),
       );
       this.currentIndex = index;
+      this.currentEntryComparisonKey = prepareDocumentSnapshot(this.document).comparisonKey;
     } finally {
       this.restoring = false;
     }
@@ -187,21 +202,32 @@ export class DocumentHistory {
   }
 
   markSaved(): void {
-    this.savedSnapshot = writeFrameJson(this.document);
+    const prepared = prepareDocumentSnapshot(this.document);
+    this.savedSnapshot = serializePreparedSnapshot(prepared);
+    this.savedComparisonKey = prepared.comparisonKey;
   }
 
   reset(markSaved: boolean = true): void {
-    const snapshot = writeFrameJson(this.document);
-    this.entries = [{ snapshot, label: 'Initial state', timestamp: Date.now() }];
+    const prepared = prepareDocumentSnapshot(this.document);
+    const snapshot = serializePreparedSnapshot(prepared);
+    this.entries = [{
+      snapshot,
+      label: 'Initial state',
+      timestamp: Date.now(),
+    }];
     this.currentIndex = 0;
-    if (markSaved) this.savedSnapshot = snapshot;
+    this.currentEntryComparisonKey = prepared.comparisonKey;
+    if (markSaved) {
+      this.savedSnapshot = snapshot;
+      this.savedComparisonKey = prepared.comparisonKey;
+    }
   }
 
   serializeAutosave(): string {
     const payload: DocumentAutosavePayload = {
       autosaveVersion: 1,
       createdAt: Date.now(),
-      entries: this.entries.map(entry => ({ ...entry })),
+      entries: this.entries.map(({ snapshot, label, timestamp }) => ({ snapshot, label, timestamp })),
       currentIndex: this.currentIndex,
       savedSnapshot: this.savedSnapshot,
     };
@@ -236,14 +262,18 @@ export class DocumentHistory {
       throw new Error('Invalid autosave currentIndex.');
     }
     if (typeof raw.savedSnapshot !== 'string') throw new Error('Invalid autosave savedSnapshot.');
-    parseFrameJson(raw.savedSnapshot, new FrameDocument(), { mode: 'strict' });
+    const savedDocument = new FrameDocument();
+    parseFrameJson(raw.savedSnapshot, savedDocument, { mode: 'strict' });
+    const savedComparisonKey = prepareDocumentSnapshot(savedDocument).comparisonKey;
 
     this.restoring = true;
     try {
       parseFrameJson(entries[currentIndex].snapshot, this.document, { mode: 'strict' });
       this.entries = entries;
       this.currentIndex = currentIndex;
+      this.currentEntryComparisonKey = prepareDocumentSnapshot(this.document).comparisonKey;
       this.savedSnapshot = raw.savedSnapshot;
+      this.savedComparisonKey = savedComparisonKey;
     } finally {
       this.restoring = false;
     }

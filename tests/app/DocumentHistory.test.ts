@@ -48,10 +48,13 @@ describe('DocumentHistory', () => {
     expect(history.isDirty).toBe(false);
     expect(history.canUndo).toBe(false);
     expect(history.canRedo).toBe(true);
+    expect(history.capture('Duplicate after undo')).toBe(false);
+    expect(history.canRedo).toBe(true);
 
     expect(history.redo()).toBe(true);
     expect(document.nodes).toHaveLength(1);
     expect(document.nodes[0].x).toBe(10);
+    expect(history.capture('Duplicate after redo')).toBe(false);
     expect(history.redo()).toBe(false);
 
     history.dispose();
@@ -186,6 +189,51 @@ describe('DocumentHistory', () => {
     expect(history.undo()).toBe(true);
     expect(document.loadCaseIndex).toBe(1);
     expect(history.isDirty).toBe(false);
+  });
+
+  it('recomputes only the live comparison key when checking direct changes', () => {
+    const document = new FrameDocument();
+    const history = new DocumentHistory(document, { trackChanges: false });
+    const parseSpy = vi.spyOn(JSON, 'parse');
+    const stringifySpy = vi.spyOn(JSON, 'stringify');
+
+    const initiallyDirty = history.isDirty;
+    document.title = 'Changed without notification';
+    const dirtyAfterDirectChange = history.isDirty;
+    const parseCalls = parseSpy.mock.calls.length;
+    const stringifyCalls = stringifySpy.mock.calls.length;
+    parseSpy.mockRestore();
+    stringifySpy.mockRestore();
+
+    expect(initiallyDirty).toBe(false);
+    expect(dirtyAfterDirectChange).toBe(true);
+    expect(parseCalls).toBe(0);
+    expect(stringifyCalls).toBe(2);
+  });
+
+  it('keeps comparison keys internal and canonicalizes reordered autosave snapshots', () => {
+    const source = new FrameDocument();
+    const sourceHistory = new DocumentHistory(source);
+    const payload = JSON.parse(sourceHistory.serializeAutosave()) as {
+      entries: Array<{ snapshot: string; label: string; timestamp: number }>;
+      savedSnapshot: string;
+    };
+    const reorderSnapshot = (snapshot: string): string => {
+      const value = JSON.parse(snapshot) as Record<string, unknown>;
+      return JSON.stringify(Object.fromEntries(Object.entries(value).reverse()));
+    };
+    payload.entries = payload.entries.map(entry => ({ ...entry, snapshot: reorderSnapshot(entry.snapshot) }));
+    payload.savedSnapshot = reorderSnapshot(payload.savedSnapshot);
+
+    expect(Object.keys(sourceHistory.getEntries()[0]).sort()).toEqual(['label', 'snapshot', 'timestamp']);
+    expect(Object.keys(payload.entries[0]).sort()).toEqual(['label', 'snapshot', 'timestamp']);
+
+    const recovered = new FrameDocument();
+    const recoveredHistory = new DocumentHistory(recovered);
+    recoveredHistory.restoreAutosave(JSON.stringify(payload));
+
+    expect(recoveredHistory.isDirty).toBe(false);
+    expect(recoveredHistory.capture('View-only duplicate')).toBe(false);
   });
 
   it('round-trips history, current position, and dirty baseline through autosave storage', () => {
