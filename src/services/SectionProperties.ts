@@ -43,8 +43,9 @@ function rectangleTorsion(width: number, height: number): number {
 /** 寸法と戻り値はSectionと同じcm/cm²/cm⁴系。 */
 export function calculateSectionProperties(input: SectionPropertyInput): SectionProperties {
   if (input.shape === SectionShape.DirectInput) {
-    for (const [name, value] of Object.entries(input)) {
-      if (name !== 'shape' && (!Number.isFinite(value) || value < 0)) {
+    for (const name of ['area', 'torsionConstant', 'inertiaY', 'inertiaZ', 'shearCoefficientY', 'shearCoefficientZ'] as const) {
+      const value = input[name];
+      if (!Number.isFinite(value) || value < 0) {
         throw new Error(`${name} must be a finite non-negative number.`);
       }
     }

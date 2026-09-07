@@ -1,16 +1,16 @@
-import { Node } from './Node';
-import { Member } from './Member';
-import { Section } from './Section';
-import { Material } from './Material';
+import { AnalysisMetadata } from './AnalysisMetadata';
 import { BoundaryCondition } from './BoundaryCondition';
-import { Spring } from './Spring';
-import { Wall } from './Wall';
+import { CMQLoad } from './CMQLoad';
 import { LoadCase, LoadCaseType } from './LoadCase';
 import { LoadCombination, LoadCombinationTerm } from './LoadCombination';
-import { AnalysisMetadata } from './AnalysisMetadata';
-import { NodeLoad } from './NodeLoad';
+import { Material } from './Material';
+import { Member } from './Member';
 import { MemberLoad } from './MemberLoad';
-import { CMQLoad } from './CMQLoad';
+import { Node } from './Node';
+import { NodeLoad } from './NodeLoad';
+import { Section } from './Section';
+import { Spring } from './Spring';
+import { Wall } from './Wall';
 
 export type NumberedEntityKind = 'node' | 'member' | 'section' | 'material' | 'spring' | 'wall';
 
@@ -114,7 +114,25 @@ export class FrameDocument {
     if (idx !== -1) this.changeListeners.splice(idx, 1);
   }
 
+  private notificationDepth = 0;
+  private pendingNotification = false;
+  revision = 0;
+
+  batchChanges<T>(action: () => T): T {
+    this.notificationDepth++;
+    try { return action(); }
+    finally {
+      this.notificationDepth--;
+      if (this.notificationDepth === 0 && this.pendingNotification) {
+        this.pendingNotification = false;
+        this.notifyChange();
+      }
+    }
+  }
+
   notifyChange(): void {
+    if (this.notificationDepth > 0) { this.pendingNotification = true; return; }
+    this.revision++;
     for (const listener of [...this.changeListeners]) listener();
   }
 

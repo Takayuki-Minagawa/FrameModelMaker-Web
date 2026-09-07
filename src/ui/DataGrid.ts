@@ -1,230 +1,38 @@
 import { parseTSV, serializeTSV } from './DataGridClipboard';
-
-export type DataGridColumnType =
-  | 'number'
-  | 'text'
-  | 'int'
-  | 'checkbox'
-  | 'select'
-  | 'enum'
-  | 'reference';
-
-export type DataGridSelectionMode = 'single' | 'multiple';
-export type DataGridSortDirection = 'asc' | 'desc';
-export type DataGridChangeSource = 'edit' | 'paste';
-export type DataGridValidationSeverity = 'error' | 'warning';
-
-export interface DataGridOption<Value = unknown> {
-  value: Value;
-  label: string;
-  disabled?: boolean;
-}
-
-export type DataGridOptionLike = DataGridOption | string | number | boolean;
-
-export interface DataGridOptionContext<T extends object> {
-  row: T;
-  rowIndex: number;
-  column: ColumnDef<T>;
-  data: readonly T[];
-}
-
-export type DataGridOptionSource<T extends object> =
-  | readonly DataGridOptionLike[]
-  | ((context: DataGridOptionContext<T>) => readonly DataGridOptionLike[]);
-
-export interface DataGridValidationIssue {
-  message: string;
-  severity?: DataGridValidationSeverity;
-}
-
-export type DataGridValidationResult = DataGridValidationIssue | string | null | undefined;
-
-export interface DataGridValidationContext<T extends object> extends DataGridOptionContext<T> {
-  value: unknown;
-}
-
-export interface ColumnDef<T extends object> {
-  key: keyof T & string;
-  header?: string;
-  width?: string;
-  type?: DataGridColumnType;
-  readOnly?: boolean;
-  required?: boolean;
-  unit?: string;
-  min?: number;
-  max?: number;
-  step?: number | 'any';
-  searchable?: boolean;
-  /** Generic select candidates. */
-  options?: DataGridOptionSource<T>;
-  /** Static enum candidates; an explicit alias for schema-driven grids. */
-  enumOptions?: readonly DataGridOptionLike[];
-  /** Dynamic or static candidates sourced from another model collection. */
-  referenceOptions?: DataGridOptionSource<T>;
-  /** Highest-priority option provider for select/enum/reference cells. */
-  getOptions?: (context: DataGridOptionContext<T>) => readonly DataGridOptionLike[];
-  allowCustomValue?: boolean;
-  parser?: (rawValue: string, context: DataGridOptionContext<T>) => unknown;
-  formatter?: (value: unknown, context: DataGridOptionContext<T>) => string;
-  validate?: (context: DataGridValidationContext<T>) => DataGridValidationResult;
-  compare?: (left: unknown, right: unknown, leftRow: T, rightRow: T) => number;
-}
-
-export interface DataGridCellChange<T extends object> {
-  rowIndex: number;
-  columnKey: keyof T & string;
-  previousValue: unknown;
-  value: unknown;
-  row: T;
-}
-
-export interface DataGridChange<T extends object> {
-  source: DataGridChangeSource;
-  /** First changed cell, provided as a convenience for single-cell edits. */
-  rowIndex: number;
-  columnKey: keyof T & string;
-  previousValue: unknown;
-  value: unknown;
-  row: T;
-  /** A paste emits one notification containing every accepted cell change. */
-  changes: readonly DataGridCellChange<T>[];
-}
-
-export interface DataGridSelectionChange<T extends object> {
-  selectedRowIndices: readonly number[];
-  selectedRows: readonly T[];
-  activeRowIndex: number | null;
-}
-
-export interface DataGridCellValidation<T extends object> extends DataGridValidationIssue {
-  rowIndex: number;
-  columnKey: keyof T & string;
-}
-
-export type DataGridColumnFilter<T extends object> =
-  | string
-  | readonly unknown[]
-  | ((value: unknown, row: T, rowIndex: number) => boolean);
-
-export interface DataGridOptions<T extends object> {
-  selectionMode?: DataGridSelectionMode;
-  onDataChanged?: (change: DataGridChange<T>) => void;
-  onSelectionChanged?: (change: DataGridSelectionChange<T>) => void;
-}
-
-export interface DataGridSelectRowOptions {
-  additive?: boolean;
-  range?: boolean;
-  scroll?: boolean;
-  focus?: boolean;
-  notify?: boolean;
-}
-
-export interface DataGridScrollOptions {
-  columnKey?: string;
-  focus?: boolean;
-}
-
-export interface DataGridPasteStart<T extends object> {
-  rowIndex: number;
-  columnKey?: keyof T & string;
-  columnIndex?: number;
-}
-
-export interface DataGridPasteError<T extends object> extends DataGridCellValidation<T> {
-  rawValue: string;
-}
-
-export interface DataGridPasteResult<T extends object> {
-  appliedCellCount: number;
-  skippedReadOnlyCellCount: number;
-  errors: readonly DataGridPasteError<T>[];
-  changes: readonly DataGridCellChange<T>[];
-}
-
-export interface DataGridValueResult {
-  value?: unknown;
-  error?: string;
-}
-
-interface GridCoordinate {
-  rowIndex: number;
-  columnIndex: number;
-}
-
-interface VisibleRow<T extends object> {
-  row: T;
-  rowIndex: number;
-  originalOrder: number;
-}
-
+import {
+  ColumnDef,
+  DataGridCellChange,
+  DataGridCellValidation,
+  DataGridChange,
+  DataGridChangeSource,
+  DataGridColumnFilter,
+  DataGridOption,
+  DataGridOptionContext,
+  DataGridOptionLike,
+  DataGridOptions,
+  DataGridPasteError,
+  DataGridPasteResult,
+  DataGridPasteStart,
+  DataGridScrollOptions,
+  DataGridSelectRowOptions,
+  DataGridSelectionChange,
+  DataGridSelectionMode,
+  DataGridSortDirection,
+  DataGridValidationIssue,
+  DataGridValidationResult,
+  DataGridValidationSeverity,
+  DataGridValueResult,
+  GridCoordinate,
+  VisibleRow,
+  coerceDataGridValue,
+  issueFrom,
+  normalizeOption,
+  valuesEqual,
+} from './DataGridTypes';
+import { buildGridView } from './GridView';
+import { gridWindow } from './GridViewport';
+export * from './DataGridTypes';
 let nextGridId = 1;
-
-function normalizeOption(option: DataGridOptionLike): DataGridOption {
-  if (typeof option === 'object' && option !== null && 'value' in option) {
-    return option;
-  }
-  return { value: option, label: String(option) };
-}
-
-function valuesEqual(left: unknown, right: unknown): boolean {
-  return Object.is(left, right) || String(left) === String(right);
-}
-
-/**
- * Convert an editor/clipboard string without silently replacing invalid
- * numbers with zero.  Exported so importers and tests can share grid rules.
- */
-export function coerceDataGridValue(
-  type: DataGridColumnType | undefined,
-  rawValue: string,
-  options: readonly DataGridOption[] = [],
-  allowCustomValue = false,
-): DataGridValueResult {
-  if (type === 'number' || type === 'int') {
-    if (rawValue.trim() === '') return { error: 'A numeric value is required.' };
-    const value = Number(rawValue);
-    if (!Number.isFinite(value)) return { error: 'Enter a finite number.' };
-    if (type === 'int' && !Number.isInteger(value)) {
-      return { error: 'Enter an integer.' };
-    }
-    return { value };
-  }
-
-  if (type === 'checkbox') {
-    const normalized = rawValue.trim().toLowerCase();
-    if (['true', '1', 'yes', 'on', 'checked'].includes(normalized)) return { value: true };
-    if (['false', '0', 'no', 'off', 'unchecked', ''].includes(normalized)) return { value: false };
-    return { error: 'Enter true/false or 1/0.' };
-  }
-
-  if (type === 'select' || type === 'enum' || type === 'reference') {
-    const match = options.find(option =>
-      String(option.value) === rawValue || option.label === rawValue,
-    );
-    if (match) return { value: match.value };
-    if (allowCustomValue) return { value: rawValue };
-    return { error: 'Choose a value from the available options.' };
-  }
-
-  return { value: rawValue };
-}
-
-function issueFrom(result: DataGridValidationResult): DataGridValidationIssue | null {
-  if (result == null || result === '') return null;
-  if (typeof result === 'string') return { message: result, severity: 'error' };
-  return { message: result.message, severity: result.severity ?? 'error' };
-}
-
-function compareValues(left: unknown, right: unknown): number {
-  if (Object.is(left, right)) return 0;
-  if (left == null) return 1;
-  if (right == null) return -1;
-  if (typeof left === 'number' && typeof right === 'number') return left - right;
-  if (typeof left === 'boolean' && typeof right === 'boolean') return Number(left) - Number(right);
-  return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
-}
 
 export class DataGrid<T extends object> {
   private readonly container: HTMLElement;
@@ -248,14 +56,21 @@ export class DataGrid<T extends object> {
   private sortDirection: DataGridSortDirection | null = null;
   private readonly validations = new Map<string, DataGridCellValidation<T>>();
   private destroyed = false;
+  private editing = false;
+  private readonly onPasteRequest: DataGridOptions<T>['onPasteRequest'];
+  private readonly rowHeight = 34;
+  private renderedStart = 0;
+  private renderedEnd = 0;
+  private readonly onScroll = () => {
+    if (this.visibleRows.length <= 200) return;
+    const start = Math.max(0, Math.floor(this.container.scrollTop / this.rowHeight) - 8);
+    if (Math.abs(start - this.renderedStart) >= 6) this.renderBody();
+  };
 
-  constructor(
-    container: HTMLElement,
-    columns: ColumnDef<T>[],
-    data: T[],
-    options: DataGridOptions<T> = {},
-  ) {
+  constructor(container: HTMLElement, columns: ColumnDef<T>[], data: T[], options: DataGridOptions<T> = {}) {
     this.container = container;
+    this.onPasteRequest = options.onPasteRequest;
+    this.container.addEventListener('scroll', this.onScroll);
     this.columns = columns;
     this.data = data;
     this.selectionMode = options.selectionMode ?? 'multiple';
@@ -281,9 +96,7 @@ export class DataGrid<T extends object> {
   setData(data: T[]): void {
     const previousSelection = this.getSelectedRowIndices();
     this.data = data;
-    this.selectedRowIndices = new Set(
-      previousSelection.filter(index => index >= 0 && index < data.length),
-    );
+    this.selectedRowIndices = new Set(previousSelection.filter((index) => index >= 0 && index < data.length));
     if (this.activeCell && this.activeCell.rowIndex >= data.length) this.activeCell = null;
     if (this.rangeAnchor && this.rangeAnchor.rowIndex >= data.length) this.rangeAnchor = null;
     this.validations.clear();
@@ -371,11 +184,9 @@ export class DataGrid<T extends object> {
   }
 
   setSelectedRowIndices(indices: readonly number[], notify = true): void {
-    const valid = indices.filter((value, index) =>
-      Number.isInteger(value)
-      && value >= 0
-      && value < this.data.length
-      && indices.indexOf(value) === index,
+    const valid = indices.filter(
+      (value, index) =>
+        Number.isInteger(value) && value >= 0 && value < this.data.length && indices.indexOf(value) === index,
     );
     const next = this.selectionMode === 'single' ? valid.slice(0, 1) : valid;
     const previous = this.getSelectedRowIndices();
@@ -400,11 +211,11 @@ export class DataGrid<T extends object> {
   }
 
   getSelectedRows(): T[] {
-    return this.getSelectedRowIndices().map(index => this.data[index]);
+    return this.getSelectedRowIndices().map((index) => this.data[index]);
   }
 
   getVisibleRowIndices(): number[] {
-    return this.visibleRows.map(item => item.rowIndex);
+    return this.visibleRows.map((item) => item.rowIndex);
   }
 
   setSearchQuery(query: string): void {
@@ -419,7 +230,7 @@ export class DataGrid<T extends object> {
   }
 
   setColumnFilter(columnKey: keyof T & string, filter: DataGridColumnFilter<T> | null): void {
-    if (!this.columns.some(column => column.key === columnKey)) return;
+    if (!this.columns.some((column) => column.key === columnKey)) return;
     if (filter == null || filter === '') this.columnFilters.delete(columnKey);
     else this.columnFilters.set(columnKey, filter);
     this.render();
@@ -437,11 +248,11 @@ export class DataGrid<T extends object> {
     this.render();
   }
 
-  setSort(columnKey: keyof T & string | null, direction: DataGridSortDirection | null = 'asc'): void {
+  setSort(columnKey: (keyof T & string) | null, direction: DataGridSortDirection | null = 'asc'): void {
     if (columnKey == null || direction == null) {
       this.sortColumn = null;
       this.sortDirection = null;
-    } else if (this.columns.some(column => column.key === columnKey)) {
+    } else if (this.columns.some((column) => column.key === columnKey)) {
       this.sortColumn = columnKey;
       this.sortDirection = direction;
     } else {
@@ -457,9 +268,10 @@ export class DataGrid<T extends object> {
 
   scrollToRow(rowIndex: number, options: DataGridScrollOptions = {}): boolean {
     if (!this.visibleRowPositions.has(rowIndex)) return false;
+    this.ensureRendered(rowIndex);
     let element: HTMLElement | null = this.table.querySelector(`tr[data-row-index="${rowIndex}"]`);
     if (options.columnKey) {
-      const columnIndex = this.columns.findIndex(column => column.key === options.columnKey);
+      const columnIndex = this.columns.findIndex((column) => column.key === options.columnKey);
       if (columnIndex >= 0) {
         element = this.table.querySelector(
           `td[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
@@ -479,19 +291,11 @@ export class DataGrid<T extends object> {
     return true;
   }
 
-  setActiveCell(
-    rowIndex: number,
-    column: number | (keyof T & string),
-    extendRange = false,
-  ): boolean {
-    const columnIndex = typeof column === 'number'
-      ? column
-      : this.columns.findIndex(item => item.key === column);
-    if (
-      columnIndex < 0
-      || columnIndex >= this.columns.length
-      || !this.visibleRowPositions.has(rowIndex)
-    ) return false;
+  setActiveCell(rowIndex: number, column: number | (keyof T & string), extendRange = false): boolean {
+    const columnIndex =
+      typeof column === 'number' ? column : this.columns.findIndex((item) => item.key === column);
+    if (columnIndex < 0 || columnIndex >= this.columns.length || !this.visibleRowPositions.has(rowIndex))
+      return false;
 
     const coordinate = { rowIndex, columnIndex };
     if (!extendRange || !this.rangeAnchor) this.rangeAnchor = coordinate;
@@ -509,7 +313,11 @@ export class DataGrid<T extends object> {
     return this.getSelectionAsTSV();
   }
 
-  pasteTSV(text: string, start?: DataGridPasteStart<T>): DataGridPasteResult<T> {
+  pasteTSV(
+    text: string,
+    start?: DataGridPasteStart<T>,
+    options: { preview?: boolean; atomic?: boolean } = {},
+  ): DataGridPasteResult<T> {
     const cells = parseTSV(text);
     const startCoordinate = this.resolvePasteStart(start);
     if (!startCoordinate) {
@@ -521,14 +329,37 @@ export class DataGrid<T extends object> {
     const errors: DataGridPasteError<T>[] = [];
     let skippedReadOnlyCellCount = 0;
     let lastCoordinate = startCoordinate;
+    const staged = new Map<T, T>();
 
     for (let pastedRow = 0; pastedRow < cells.length; pastedRow++) {
       const visible = this.visibleRows[startVisibleRow + pastedRow];
-      if (!visible) break;
+      if (!visible) {
+        errors.push({
+          rowIndex: cells.length,
+          columnKey: this.columns[startCoordinate.columnIndex].key,
+          message: 'Paste exceeds available rows.',
+          severity: 'error',
+          rawValue: '',
+        });
+        break;
+      }
+      const candidate =
+        staged.get(visible.row) ??
+        (Object.assign(Object.create(Object.getPrototypeOf(visible.row)), visible.row) as T);
+      staged.set(visible.row, candidate);
       for (let pastedColumn = 0; pastedColumn < cells[pastedRow].length; pastedColumn++) {
         const columnIndex = startCoordinate.columnIndex + pastedColumn;
         const column = this.columns[columnIndex];
-        if (!column) break;
+        if (!column) {
+          errors.push({
+            rowIndex: visible.rowIndex,
+            columnKey: this.columns[startCoordinate.columnIndex].key,
+            message: 'Paste exceeds available columns.',
+            severity: 'error',
+            rawValue: '',
+          });
+          break;
+        }
         lastCoordinate = { rowIndex: visible.rowIndex, columnIndex };
         if (column.readOnly) {
           skippedReadOnlyCellCount++;
@@ -538,24 +369,19 @@ export class DataGrid<T extends object> {
         const rawValue = cells[pastedRow][pastedColumn];
         const validationKey = this.validationKey(visible.rowIndex, column.key);
         if (rawValue === '') {
-          this.validations.delete(validationKey);
+          if (!options.preview) this.validations.delete(validationKey);
           continue;
         }
 
-        const converted = this.convertRawValue(rawValue, column, visible.row, visible.rowIndex);
+        const converted = this.convertRawValue(rawValue, column, candidate, visible.rowIndex);
         if (converted.error) {
-          const error = this.makeValidation(
-            visible.rowIndex,
-            column.key,
-            converted.error,
-            'error',
-          );
-          this.validations.set(validationKey, error);
+          const error = this.makeValidation(visible.rowIndex, column.key, converted.error, 'error');
+          if (!options.preview) this.validations.set(validationKey, error);
           errors.push({ ...error, rawValue });
           continue;
         }
 
-        const issue = this.validateValue(converted.value, column, visible.row, visible.rowIndex);
+        const issue = this.validateValue(converted.value, column, candidate, visible.rowIndex);
         if (issue) {
           const error = this.makeValidation(
             visible.rowIndex,
@@ -563,15 +389,15 @@ export class DataGrid<T extends object> {
             issue.message,
             issue.severity ?? 'error',
           );
-          this.validations.set(validationKey, error);
+          if (!options.preview) this.validations.set(validationKey, error);
           errors.push({ ...error, rawValue });
           continue;
         }
 
-        this.validations.delete(validationKey);
+        if (!options.preview) this.validations.delete(validationKey);
         const previousValue = this.readValue(visible.row, column.key);
         if (!Object.is(previousValue, converted.value)) {
-          this.writeValue(visible.row, column.key, converted.value);
+          this.writeValue(candidate, column.key, converted.value);
           changes.push({
             rowIndex: visible.rowIndex,
             columnKey: column.key,
@@ -583,35 +409,37 @@ export class DataGrid<T extends object> {
       }
     }
 
-    this.rangeAnchor = startCoordinate;
-    this.activeCell = lastCoordinate;
-    this.render();
-    if (changes.length > 0) this.emitDataChange('paste', changes);
+    const apply = !options.preview && !(options.atomic && errors.length > 0);
+    if (apply) {
+      for (const cell of changes) this.writeValue(cell.row, cell.columnKey, cell.value);
+      try {
+        if (changes.length > 0) this.emitDataChange('paste', changes);
+      } catch (error) {
+        for (const cell of [...changes].reverse())
+          this.writeValue(cell.row, cell.columnKey, cell.previousValue);
+        this.render();
+        throw error;
+      }
+      this.rangeAnchor = startCoordinate;
+      this.activeCell = lastCoordinate;
+      this.render();
+    }
 
     return {
-      appliedCellCount: changes.length,
+      appliedCellCount: apply ? changes.length : 0,
       skippedReadOnlyCellCount,
       errors,
       changes,
     };
   }
 
-  setCellValidation(
-    rowIndex: number,
-    columnKey: keyof T & string,
-    issue: DataGridValidationResult,
-  ): void {
+  setCellValidation(rowIndex: number, columnKey: keyof T & string, issue: DataGridValidationResult): void {
     const normalized = issueFrom(issue);
     const key = this.validationKey(rowIndex, columnKey);
     if (normalized) {
       this.validations.set(
         key,
-        this.makeValidation(
-          rowIndex,
-          columnKey,
-          normalized.message,
-          normalized.severity ?? 'error',
-        ),
+        this.makeValidation(rowIndex, columnKey, normalized.message, normalized.severity ?? 'error'),
       );
     } else {
       this.validations.delete(key);
@@ -619,10 +447,7 @@ export class DataGrid<T extends object> {
     this.updateCellValidationDisplay(rowIndex, columnKey);
   }
 
-  getCellValidation(
-    rowIndex: number,
-    columnKey: keyof T & string,
-  ): DataGridCellValidation<T> | null {
+  getCellValidation(rowIndex: number, columnKey: keyof T & string): DataGridCellValidation<T> | null {
     return this.validations.get(this.validationKey(rowIndex, columnKey)) ?? null;
   }
 
@@ -645,12 +470,7 @@ export class DataGrid<T extends object> {
         if (issue) {
           this.validations.set(
             this.validationKey(rowIndex, column.key),
-            this.makeValidation(
-              rowIndex,
-              column.key,
-              issue.message,
-              issue.severity ?? 'error',
-            ),
+            this.makeValidation(rowIndex, column.key, issue.message, issue.severity ?? 'error'),
           );
         }
       }
@@ -693,11 +513,39 @@ export class DataGrid<T extends object> {
     thead.appendChild(headerRow);
     this.table.appendChild(thead);
 
+    this.renderBody();
+  }
+
+  private renderBody(): void {
+    const scrollTop = this.container.scrollTop;
+    const window = gridWindow(
+      this.visibleRows.length,
+      scrollTop,
+      this.container.clientHeight || 600,
+      this.rowHeight,
+    );
+    this.table.querySelector('tbody')?.remove();
     const tbody = document.createElement('tbody');
-    for (let visibleIndex = 0; visibleIndex < this.visibleRows.length; visibleIndex++) {
+    this.table.classList.toggle('data-grid-virtual', this.visibleRows.length > 200);
+    this.renderedStart = window.start;
+    this.renderedEnd = window.end;
+    const spacer = (height: number) => {
+      if (!height) return;
+      const row = document.createElement('tr');
+      row.setAttribute('aria-hidden', 'true');
+      const cell = document.createElement('td');
+      cell.colSpan = this.columns.length;
+      cell.style.cssText = `height:${height}px;padding:0;border:0`;
+      row.append(cell);
+      tbody.append(row);
+    };
+    spacer(window.start * this.rowHeight);
+    for (let visibleIndex = window.start; visibleIndex < window.end; visibleIndex++) {
       const { row, rowIndex } = this.visibleRows[visibleIndex];
       const tr = document.createElement('tr');
       tr.setAttribute('role', 'row');
+      tr.setAttribute('aria-rowindex', String(visibleIndex + 2));
+      if (this.visibleRows.length > 200) tr.style.height = `${this.rowHeight}px`;
       tr.dataset.rowIndex = String(rowIndex);
       tr.dataset.visibleIndex = String(visibleIndex);
       const selected = this.selectedRowIndices.has(rowIndex);
@@ -720,12 +568,15 @@ export class DataGrid<T extends object> {
       }
       tbody.appendChild(tr);
     }
+    spacer((this.visibleRows.length - window.end) * this.rowHeight);
     this.table.appendChild(tbody);
+    this.container.scrollTop = scrollTop;
     this.updateSelectionDisplay();
   }
 
   destroy(): void {
     if (this.destroyed) return;
+    this.container.removeEventListener('scroll', this.onScroll);
     this.table.removeEventListener('change', this.changeHandler);
     this.table.removeEventListener('click', this.clickHandler);
     this.table.removeEventListener('keydown', this.keydownHandler);
@@ -752,6 +603,7 @@ export class DataGrid<T extends object> {
       return;
     }
 
+    this.editing = target.matches('.data-grid-editor') && !event.ctrlKey && !event.metaKey && !event.shiftKey;
     const cell = target.closest<HTMLTableCellElement>('td[data-row-index][data-column-index]');
     const row = cell ?? target.closest<HTMLTableRowElement>('tr[data-row-index]');
     if (!row || !this.table.contains(row)) return;
@@ -784,10 +636,48 @@ export class DataGrid<T extends object> {
       columnIndex: Number(cell.dataset.columnIndex),
     };
 
+    if (event.isComposing || event.keyCode === 229) return;
+    const editor = this.getEditor(target);
+    if (event.key === 'Tab') {
+      this.leaveGrid(event);
+      return;
+    }
+    if (event.key === 'F2') {
+      event.preventDefault();
+      this.editing = !this.editing;
+      return;
+    }
+    if (this.editing) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.editing = false;
+        if (editor) {
+          const column = this.columns[current.columnIndex];
+          const value = this.readValue(this.data[current.rowIndex], column.key);
+          if (editor instanceof HTMLInputElement && editor.type === 'checkbox')
+            editor.checked = Boolean(value);
+          else editor.value = String(value ?? '');
+        }
+      } else if (event.key === 'Enter' && editor && !(editor instanceof HTMLSelectElement)) {
+        event.preventDefault();
+        this.commitEditor(editor);
+        this.editing = false;
+      }
+      return;
+    }
+    if (event.key === 'Tab') return;
+    if (
+      event.key === 'Enter' ||
+      (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey)
+    ) {
+      this.editing = true;
+      if (event.key === 'Enter') event.preventDefault();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault();
       if (this.selectionMode === 'multiple') {
-        this.setSelectedRowIndices(this.visibleRows.map(item => item.rowIndex));
+        this.setSelectedRowIndices(this.visibleRows.map((item) => item.rowIndex));
         if (this.visibleRows.length > 0 && this.columns.length > 0) {
           this.rangeAnchor = { rowIndex: this.visibleRows[0].rowIndex, columnIndex: 0 };
           this.activeCell = {
@@ -818,6 +708,7 @@ export class DataGrid<T extends object> {
 
   private readonly copyHandler = (event: ClipboardEvent): void => {
     if (!event.clipboardData) return;
+    if (this.editing && this.getEditor(event.target)) return;
     event.clipboardData.setData('text/plain', this.getSelectionAsTSV());
     event.preventDefault();
   };
@@ -827,9 +718,12 @@ export class DataGrid<T extends object> {
     const text = event.clipboardData.getData('text/plain');
     const editor = this.getEditor(event.target);
     const start = editor ? this.positionFromEditor(editor) : undefined;
-    this.pasteTSV(text, start
-      ? { rowIndex: start.rowIndex, columnIndex: start.columnIndex }
-      : undefined);
+    if (this.onPasteRequest) {
+      this.onPasteRequest(text, start ?? undefined);
+      event.preventDefault();
+      return;
+    }
+    this.pasteTSV(text, start ? { rowIndex: start.rowIndex, columnIndex: start.columnIndex } : undefined);
     event.preventDefault();
   };
 
@@ -898,10 +792,7 @@ export class DataGrid<T extends object> {
     editor.dataset.rowIndex = String(rowIndex);
     editor.dataset.columnIndex = String(columnIndex);
     editor.dataset.columnKey = column.key;
-    editor.setAttribute(
-      'aria-label',
-      `${column.header ?? column.key}, row ${rowIndex + 1}`,
-    );
+    editor.setAttribute('aria-label', `${column.header ?? column.key}, row ${rowIndex + 1}`);
     return editor;
   }
 
@@ -920,9 +811,10 @@ export class DataGrid<T extends object> {
       } else {
         const options = this.resolveOptions(column, row, position.rowIndex);
         const optionIndex = Number(selected?.dataset.optionIndex);
-        converted = Number.isInteger(optionIndex) && options[optionIndex]
-          ? { value: options[optionIndex].value }
-          : { error: 'Choose a value from the available options.' };
+        converted =
+          Number.isInteger(optionIndex) && options[optionIndex]
+            ? { value: options[optionIndex].value }
+            : { error: 'Choose a value from the available options.' };
       }
     } else if (column.type === 'checkbox') {
       converted = { value: editor.checked };
@@ -1003,85 +895,40 @@ export class DataGrid<T extends object> {
     }
     if (this.isSelectColumn(column) && !column.allowCustomValue) {
       const options = this.resolveOptions(column, row, rowIndex);
-      if (!options.some(option => valuesEqual(option.value, value))) {
+      if (!options.some((option) => valuesEqual(option.value, value))) {
         return { message: 'Choose a value from the available options.', severity: 'error' };
       }
     }
-    return issueFrom(column.validate?.({
-      ...this.makeOptionContext(column, row, rowIndex),
-      value,
-    }));
-  }
-
-  private rebuildVisibleRows(): void {
-    let rows: VisibleRow<T>[] = this.data.map((row, rowIndex) => ({
-      row,
-      rowIndex,
-      originalOrder: rowIndex,
-    }));
-
-    if (this.rowFilter) {
-      rows = rows.filter(item => this.rowFilter?.(item.row, item.rowIndex) !== false);
-    }
-    if (this.searchQuery) {
-      rows = rows.filter(item => this.columns.some(column =>
-        column.searchable !== false
-        && this.formatValue(
-          this.readValue(item.row, column.key),
-          column,
-          item.row,
-          item.rowIndex,
-        ).toLocaleLowerCase().includes(this.searchQuery),
-      ));
-    }
-    for (const [columnKey, filter] of this.columnFilters) {
-      const column = this.columns.find(item => item.key === columnKey);
-      if (!column) continue;
-      rows = rows.filter(item => {
-        const value = this.readValue(item.row, columnKey);
-        if (typeof filter === 'function') return filter(value, item.row, item.rowIndex);
-        if (typeof filter === 'string') {
-          return this.formatValue(value, column, item.row, item.rowIndex)
-            .toLocaleLowerCase()
-            .includes(filter.toLocaleLowerCase());
-        }
-        return filter.some(candidate => Object.is(candidate, value));
-      });
-    }
-
-    if (this.sortColumn && this.sortDirection) {
-      const column = this.columns.find(item => item.key === this.sortColumn);
-      if (column) {
-        const direction = this.sortDirection === 'asc' ? 1 : -1;
-        rows.sort((left, right) => {
-          const leftValue = this.readValue(left.row, column.key);
-          const rightValue = this.readValue(right.row, column.key);
-          const result = column.compare
-            ? column.compare(leftValue, rightValue, left.row, right.row)
-            : compareValues(leftValue, rightValue);
-          return result === 0
-            ? left.originalOrder - right.originalOrder
-            : result * direction;
-        });
-      }
-    }
-    this.visibleRows = rows;
-    this.visibleRowPositions = new Map(
-      rows.map((item, position) => [item.rowIndex, position]),
+    return issueFrom(
+      column.validate?.({
+        ...this.makeOptionContext(column, row, rowIndex),
+        value,
+      }),
     );
   }
 
-  private formatValue(
-    value: unknown,
-    column: ColumnDef<T>,
-    row: T,
-    rowIndex: number,
-  ): string {
+  private rebuildVisibleRows(): void {
+    this.visibleRows = buildGridView({
+      data: this.data,
+      columns: this.columns,
+      rowFilter: this.rowFilter,
+      searchQuery: this.searchQuery,
+      columnFilters: this.columnFilters,
+      sortColumn: this.sortColumn,
+      sortDirection: this.sortDirection,
+      readValue: this.readValue.bind(this),
+      formatValue: this.formatValue.bind(this),
+    });
+    this.visibleRowPositions = new Map(this.visibleRows.map((item, position) => [item.rowIndex, position]));
+  }
+
+  private formatValue(value: unknown, column: ColumnDef<T>, row: T, rowIndex: number): string {
     const context = this.makeOptionContext(column, row, rowIndex);
     if (column.formatter) return column.formatter(value, context);
     if (this.isSelectColumn(column)) {
-      const option = this.resolveOptions(column, row, rowIndex)
-        .find(candidate => valuesEqual(candidate.value, value));
+      const option = this.resolveOptions(column, row, rowIndex).find((candidate) =>
+        valuesEqual(candidate.value, value),
+      );
       if (option) return option.label;
     }
     if (column.type === 'checkbox') return value ? 'true' : 'false';
@@ -1093,9 +940,10 @@ export class DataGrid<T extends object> {
     let source: readonly DataGridOptionLike[] = [];
     if (column.getOptions) source = column.getOptions(context);
     else if (column.referenceOptions) {
-      source = typeof column.referenceOptions === 'function'
-        ? column.referenceOptions(context)
-        : column.referenceOptions;
+      source =
+        typeof column.referenceOptions === 'function'
+          ? column.referenceOptions(context)
+          : column.referenceOptions;
     } else if (column.enumOptions) source = column.enumOptions;
     else if (column.options) {
       source = typeof column.options === 'function' ? column.options(context) : column.options;
@@ -1103,11 +951,7 @@ export class DataGrid<T extends object> {
     return source.map(normalizeOption);
   }
 
-  private makeOptionContext(
-    column: ColumnDef<T>,
-    row: T,
-    rowIndex: number,
-  ): DataGridOptionContext<T> {
+  private makeOptionContext(column: ColumnDef<T>, row: T, rowIndex: number): DataGridOptionContext<T> {
     return { column, row, rowIndex, data: this.data };
   }
 
@@ -1151,7 +995,41 @@ export class DataGrid<T extends object> {
     this.focusCell(rowIndex, nextColumnIndex);
   }
 
+  private leaveGrid(event: KeyboardEvent): void {
+    const candidates = [
+      ...document.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, a[href], summary, [tabindex]',
+      ),
+    ].filter(
+      (element) =>
+        !this.table.contains(element) &&
+        element.tabIndex >= 0 &&
+        !element.matches(':disabled') &&
+        !element.closest('[inert]') &&
+        element.getClientRects().length > 0,
+    );
+    const direction = event.shiftKey ? Node.DOCUMENT_POSITION_PRECEDING : Node.DOCUMENT_POSITION_FOLLOWING;
+    const outside = candidates.filter((element) =>
+      Boolean(this.table.compareDocumentPosition(element) & direction),
+    );
+    const target = event.shiftKey ? outside.at(-1) : outside[0];
+    if (target) {
+      event.preventDefault();
+      this.editing = false;
+      target.focus();
+    }
+  }
+
+  private ensureRendered(rowIndex: number): void {
+    const position = this.visibleRowPositions.get(rowIndex);
+    if (position == null || (position >= this.renderedStart && position < this.renderedEnd)) return;
+    this.container.scrollTop = position * this.rowHeight;
+    this.renderBody();
+  }
+
   private focusCell(rowIndex: number, columnIndex: number): void {
+    this.editing = false;
+    this.ensureRendered(rowIndex);
     const editor = this.table.querySelector<HTMLElement>(
       `.data-grid-editor[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
     );
@@ -1169,18 +1047,11 @@ export class DataGrid<T extends object> {
       for (let rowPosition = bounds.startRow; rowPosition <= bounds.endRow; rowPosition++) {
         const visible = this.visibleRows[rowPosition];
         const values: unknown[] = [];
-        for (
-          let columnIndex = bounds.startColumn;
-          columnIndex <= bounds.endColumn;
-          columnIndex++
-        ) {
+        for (let columnIndex = bounds.startColumn; columnIndex <= bounds.endColumn; columnIndex++) {
           const column = this.columns[columnIndex];
-          values.push(this.formatValue(
-            this.readValue(visible.row, column.key),
-            column,
-            visible.row,
-            visible.rowIndex,
-          ));
+          values.push(
+            this.formatValue(this.readValue(visible.row, column.key), column, visible.row, visible.rowIndex),
+          );
         }
         rows.push(values);
       }
@@ -1188,13 +1059,12 @@ export class DataGrid<T extends object> {
     }
 
     return this.visibleRows
-      .filter(item => this.selectedRowIndices.has(item.rowIndex))
-      .map(item => this.columns.map(column => this.formatValue(
-        this.readValue(item.row, column.key),
-        column,
-        item.row,
-        item.rowIndex,
-      )));
+      .filter((item) => this.selectedRowIndices.has(item.rowIndex))
+      .map((item) =>
+        this.columns.map((column) =>
+          this.formatValue(this.readValue(item.row, column.key), column, item.row, item.rowIndex),
+        ),
+      );
   }
 
   private getRangeBounds(): {
@@ -1218,28 +1088,30 @@ export class DataGrid<T extends object> {
 
   private resolvePasteStart(start?: DataGridPasteStart<T>): GridCoordinate | null {
     if (start) {
-      const columnIndex = start.columnIndex
-        ?? (start.columnKey == null
-          ? -1
-          : this.columns.findIndex(column => column.key === start.columnKey));
+      const columnIndex =
+        start.columnIndex ??
+        (start.columnKey == null ? -1 : this.columns.findIndex((column) => column.key === start.columnKey));
       if (
-        columnIndex >= 0
-        && columnIndex < this.columns.length
-        && this.visibleRowPositions.has(start.rowIndex)
-      ) return { rowIndex: start.rowIndex, columnIndex };
+        columnIndex >= 0 &&
+        columnIndex < this.columns.length &&
+        this.visibleRowPositions.has(start.rowIndex)
+      )
+        return { rowIndex: start.rowIndex, columnIndex };
       return null;
     }
     if (
-      this.activeCell
-      && this.selectedRowIndices.has(this.activeCell.rowIndex)
-      && this.visibleRowPositions.has(this.activeCell.rowIndex)
-    ) return this.activeCell;
+      this.activeCell &&
+      this.selectedRowIndices.has(this.activeCell.rowIndex) &&
+      this.visibleRowPositions.has(this.activeCell.rowIndex)
+    )
+      return this.activeCell;
     if (
-      this.rowSelectionAnchor != null
-      && this.selectedRowIndices.has(this.rowSelectionAnchor)
-      && this.visibleRowPositions.has(this.rowSelectionAnchor)
-      && this.columns.length > 0
-    ) return { rowIndex: this.rowSelectionAnchor, columnIndex: 0 };
+      this.rowSelectionAnchor != null &&
+      this.selectedRowIndices.has(this.rowSelectionAnchor) &&
+      this.visibleRowPositions.has(this.rowSelectionAnchor) &&
+      this.columns.length > 0
+    )
+      return { rowIndex: this.rowSelectionAnchor, columnIndex: 0 };
     if (this.activeCell && this.visibleRowPositions.has(this.activeCell.rowIndex)) {
       return this.activeCell;
     }
@@ -1250,7 +1122,7 @@ export class DataGrid<T extends object> {
   private updateSelectionDisplay(): void {
     const bounds = this.getRangeBounds();
     const rows = this.table.querySelectorAll<HTMLTableRowElement>('tbody tr[data-row-index]');
-    rows.forEach(row => {
+    rows.forEach((row) => {
       const rowIndex = Number(row.dataset.rowIndex);
       const selected = this.selectedRowIndices.has(rowIndex);
       row.classList.toggle('selected', selected);
@@ -1259,19 +1131,22 @@ export class DataGrid<T extends object> {
     });
 
     const cells = this.table.querySelectorAll<HTMLTableCellElement>('td[data-row-index][data-column-index]');
-    cells.forEach(cell => {
+    cells.forEach((cell) => {
       const rowIndex = Number(cell.dataset.rowIndex);
       const columnIndex = Number(cell.dataset.columnIndex);
       const visibleIndex = this.visibleRowPositions.get(rowIndex) ?? -1;
-      const inRange = bounds != null
-        && visibleIndex >= bounds.startRow
-        && visibleIndex <= bounds.endRow
-        && columnIndex >= bounds.startColumn
-        && columnIndex <= bounds.endColumn;
-      const active = this.activeCell?.rowIndex === rowIndex
-        && this.activeCell.columnIndex === columnIndex;
+      const inRange =
+        bounds != null &&
+        visibleIndex >= bounds.startRow &&
+        visibleIndex <= bounds.endRow &&
+        columnIndex >= bounds.startColumn &&
+        columnIndex <= bounds.endColumn;
+      const active = this.activeCell?.rowIndex === rowIndex && this.activeCell.columnIndex === columnIndex;
       cell.classList.toggle('range-selected', inRange);
       cell.classList.toggle('active', active);
+      const editor = cell.querySelector<HTMLElement>('.data-grid-editor');
+      if (editor)
+        editor.tabIndex = active || (!this.activeCell && visibleIndex === 0 && columnIndex === 0) ? 0 : -1;
       cell.style.boxShadow = active
         ? 'inset 0 0 0 2px var(--accent)'
         : inRange
@@ -1284,7 +1159,7 @@ export class DataGrid<T extends object> {
     const selectedRowIndices = this.getSelectedRowIndices();
     this.onSelectionChanged?.({
       selectedRowIndices,
-      selectedRows: selectedRowIndices.map(index => this.data[index]),
+      selectedRows: selectedRowIndices.map((index) => this.data[index]),
       activeRowIndex: this.activeCell?.rowIndex ?? selectedRowIndices[0] ?? null,
     });
   }
@@ -1322,7 +1197,7 @@ export class DataGrid<T extends object> {
   }
 
   private updateCellValidationDisplay(rowIndex: number, columnKey: keyof T & string): void {
-    const columnIndex = this.columns.findIndex(column => column.key === columnKey);
+    const columnIndex = this.columns.findIndex((column) => column.key === columnKey);
     if (columnIndex < 0) return;
     const cell = this.table.querySelector<HTMLTableCellElement>(
       `td[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`,
@@ -1374,10 +1249,12 @@ export class DataGrid<T extends object> {
   }
 
   private hasViewTransform(): boolean {
-    return this.searchQuery !== ''
-      || this.columnFilters.size > 0
-      || this.rowFilter != null
-      || this.sortColumn != null;
+    return (
+      this.searchQuery !== '' ||
+      this.columnFilters.size > 0 ||
+      this.rowFilter != null ||
+      this.sortColumn != null
+    );
   }
 
   private sameIndices(left: readonly number[], right: readonly number[]): boolean {

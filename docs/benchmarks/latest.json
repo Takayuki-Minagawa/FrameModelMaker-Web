@@ -1,0 +1,93 @@
+{
+  "date": "2026-09-07T03:22:00.390Z",
+  "cpu": "Apple M4 Max",
+  "platform": "darwin",
+  "node": "v22.18.0",
+  "browser": "153.0.8010.12",
+  "baseline": "b34cd1d",
+  "grid": [
+    {
+      "count": 1000,
+      "variant": "baseline",
+      "initialMs": 56.30000001192093,
+      "sortP50": 58.900000005960464,
+      "sortP95": 70,
+      "domRows": 1000
+    },
+    {
+      "count": 1000,
+      "variant": "current",
+      "initialMs": 2.399999976158142,
+      "sortP50": 2.0999999940395355,
+      "sortP95": 2.5,
+      "domRows": 31
+    },
+    {
+      "count": 10000,
+      "variant": "baseline",
+      "initialMs": 639.4000000059605,
+      "sortP50": 642.8000000119209,
+      "sortP95": 687.5,
+      "domRows": 10000
+    },
+    {
+      "count": 10000,
+      "variant": "current",
+      "initialMs": 6.4000000059604645,
+      "sortP50": 2.399999976158142,
+      "sortP95": 2.9000000059604645,
+      "domRows": 31
+    },
+    {
+      "count": 50000,
+      "variant": "baseline",
+      "initialMs": 3028.800000011921,
+      "sortP50": 3814.199999988079,
+      "sortP95": 4519.5999999940395,
+      "domRows": 50000
+    },
+    {
+      "count": 50000,
+      "variant": "current",
+      "initialMs": 5.5,
+      "sortP50": 5.5999999940395355,
+      "sortP95": 14.399999976158142,
+      "domRows": 31
+    }
+  ],
+  "viewer": [
+    {
+      "count": 1000,
+      "initialMs": 8.700000017881393,
+      "updateP50": 0.4000000059604645,
+      "updateP95": 0.7000000178813934,
+      "pickP50": 0.19999998807907104,
+      "pickP95": 0.9000000059604645,
+      "calls": 4,
+      "geometries": 4,
+      "textures": 0
+    },
+    {
+      "count": 10000,
+      "initialMs": 10.400000005960464,
+      "updateP50": 1.800000011920929,
+      "updateP95": 3.5999999940395355,
+      "pickP50": 0.9000000059604645,
+      "pickP95": 1.699999988079071,
+      "calls": 4,
+      "geometries": 4,
+      "textures": 0
+    },
+    {
+      "count": 50000,
+      "initialMs": 17,
+      "updateP50": 7.899999976158142,
+      "updateP95": 8.699999988079071,
+      "pickP50": 4.5,
+      "pickP95": 5.100000023841858,
+      "calls": 4,
+      "geometries": 4,
+      "textures": 0
+    }
+  ]
+}

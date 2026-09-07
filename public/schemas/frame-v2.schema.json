@@ -1,0 +1,1124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://takayuki-minagawa.github.io/FrameModelMaker-Web/schemas/frame-v2.schema.json",
+  "title": "FrameJsonDocument",
+  "description": "Canonical serialized output. Legacy input aliases and defaults are handled by the application parser.",
+  "$ref": "#/$defs/FrameJsonDocument_1",
+  "$defs": {
+    "FrameJsonDocument_1": {
+      "type": "object",
+      "properties": {
+        "formatVersion": {
+          "const": 2,
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        },
+        "loadCaseCount": {
+          "type": "number"
+        },
+        "loadCaseIndex": {
+          "type": "number"
+        },
+        "calcCaseMemo": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "loadCases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_2"
+          }
+        },
+        "loadCombinations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_3"
+          }
+        },
+        "analysisMetadata": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/AnalysisMetadata_5"
+            }
+          ]
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_19"
+          }
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_21"
+          }
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_24"
+          }
+        },
+        "materials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_25"
+          }
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_26"
+          }
+        },
+        "springs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_27"
+          }
+        },
+        "walls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_28"
+          }
+        }
+      },
+      "required": [
+        "formatVersion",
+        "title",
+        "loadCaseCount",
+        "loadCaseIndex",
+        "calcCaseMemo",
+        "loadCases",
+        "loadCombinations",
+        "analysisMetadata",
+        "nodes",
+        "members",
+        "sections",
+        "materials",
+        "boundaries",
+        "springs",
+        "walls"
+      ],
+      "additionalProperties": false
+    },
+    "__type_2": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "memo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type",
+        "memo"
+      ],
+      "additionalProperties": false
+    },
+    "__type_3": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "memo": {
+          "type": "string"
+        },
+        "terms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_4"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "memo",
+        "terms"
+      ],
+      "additionalProperties": false
+    },
+    "__type_4": {
+      "type": "object",
+      "properties": {
+        "loadCaseId": {
+          "type": "string"
+        },
+        "factor": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "loadCaseId",
+        "factor"
+      ],
+      "additionalProperties": false
+    },
+    "AnalysisMetadata_5": {
+      "type": "object",
+      "properties": {
+        "sourceFormat": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "type": "string"
+        },
+        "units": {
+          "$ref": "#/$defs/Record_6"
+        },
+        "ndm": {
+          "type": "number"
+        },
+        "ndf": {
+          "type": "number"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EqualDOFConstraintMetadata_7"
+          }
+        },
+        "nodalMasses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodalMassMetadata_9"
+          }
+        },
+        "linkElements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LinkElementMetadata_11"
+          }
+        },
+        "localAxes": {
+          "$ref": "#/$defs/Record_14"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AnalysisGroupMetadata_15"
+          }
+        },
+        "resultExtraction": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            },
+            {
+              "const": true,
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/JsonValue"
+              }
+            },
+            {
+              "$ref": "#/$defs/__type_16"
+            }
+          ]
+        },
+        "traceability": {
+          "$ref": "#/$defs/SourceTraceabilityMetadata_17"
+        },
+        "extensions": {
+          "$ref": "#/$defs/Record_18"
+        }
+      },
+      "required": [
+        "sourceFormat",
+        "schemaVersion",
+        "units",
+        "constraints",
+        "nodalMasses",
+        "linkElements",
+        "localAxes",
+        "groups"
+      ],
+      "additionalProperties": false
+    },
+    "Record_6": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "EqualDOFConstraintMetadata_7": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "equalDOF",
+          "type": "string"
+        },
+        "retainedNode": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "constrainedNode": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dofs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "raw": {
+          "$ref": "#/$defs/__type_8"
+        }
+      },
+      "required": [
+        "type",
+        "retainedNode",
+        "constrainedNode",
+        "dofs"
+      ],
+      "additionalProperties": false
+    },
+    "__type_8": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      }
+    },
+    "JsonValue": {
+      "anyOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          }
+        }
+      ]
+    },
+    "NodalMassMetadata_9": {
+      "type": "object",
+      "properties": {
+        "nodeTag": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "raw": {
+          "$ref": "#/$defs/__type_10"
+        }
+      },
+      "required": [
+        "nodeTag",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    "__type_10": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      }
+    },
+    "LinkElementMetadata_11": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "number"
+        },
+        "nodeI": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nodeJ": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "directions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stiffness": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "orientation": {
+          "$ref": "#/$defs/LocalAxisMetadata_12"
+        },
+        "shearDistance": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "raw": {
+          "$ref": "#/$defs/__type_13"
+        }
+      },
+      "required": [
+        "tag",
+        "nodeI",
+        "nodeJ",
+        "directions",
+        "stiffness"
+      ],
+      "additionalProperties": false
+    },
+    "LocalAxisMetadata_12": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "y": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "vecxz": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "__type_13": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      }
+    },
+    "Record_14": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "$ref": "#/$defs/LocalAxisMetadata_12"
+      }
+    },
+    "AnalysisGroupMetadata_15": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "nodeTags": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "elementTags": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            },
+            {
+              "const": true,
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/JsonValue"
+              }
+            },
+            {
+              "$ref": "#/$defs/__type_16"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "nodeTags",
+        "elementTags"
+      ],
+      "additionalProperties": false
+    },
+    "__type_16": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      }
+    },
+    "SourceTraceabilityMetadata_17": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "generatedBy": {
+          "type": "string"
+        },
+        "generatedAt": {
+          "type": "string"
+        },
+        "raw": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            },
+            {
+              "const": true,
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/JsonValue"
+              }
+            },
+            {
+              "$ref": "#/$defs/__type_16"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Record_18": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "$ref": "#/$defs/JsonValue"
+      }
+    },
+    "__type_19": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        },
+        "temperature": {
+          "type": "number"
+        },
+        "intensityGroup": {
+          "type": "number"
+        },
+        "longWeight": {
+          "type": "number"
+        },
+        "forceWeight": {
+          "type": "number"
+        },
+        "addForceWeight": {
+          "type": "number"
+        },
+        "area": {
+          "type": "number"
+        },
+        "isShown": {
+          "type": "boolean"
+        },
+        "loads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_20"
+          }
+        }
+      },
+      "required": [
+        "number",
+        "x",
+        "y",
+        "z",
+        "temperature",
+        "intensityGroup",
+        "longWeight",
+        "forceWeight",
+        "addForceWeight",
+        "area",
+        "isShown",
+        "loads"
+      ],
+      "additionalProperties": false
+    },
+    "__type_20": {
+      "type": "object",
+      "properties": {
+        "p1": {
+          "type": "number"
+        },
+        "p2": {
+          "type": "number"
+        },
+        "p3": {
+          "type": "number"
+        },
+        "m1": {
+          "type": "number"
+        },
+        "m2": {
+          "type": "number"
+        },
+        "m3": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "p1",
+        "p2",
+        "p3",
+        "m1",
+        "m2",
+        "m3"
+      ],
+      "additionalProperties": false
+    },
+    "__type_21": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "iNodeNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "jNodeNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ixSpring": {
+          "type": "number"
+        },
+        "iySpring": {
+          "type": "number"
+        },
+        "izSpring": {
+          "type": "number"
+        },
+        "jxSpring": {
+          "type": "number"
+        },
+        "jySpring": {
+          "type": "number"
+        },
+        "jzSpring": {
+          "type": "number"
+        },
+        "sectionNumber": {
+          "type": "number"
+        },
+        "p1": {
+          "type": "number"
+        },
+        "p2": {
+          "type": "number"
+        },
+        "p3": {
+          "type": "number"
+        },
+        "isShown": {
+          "type": "boolean"
+        },
+        "memberLoads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_22"
+          }
+        },
+        "cmqLoads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__type_23"
+          }
+        }
+      },
+      "required": [
+        "number",
+        "iNodeNumber",
+        "jNodeNumber",
+        "ixSpring",
+        "iySpring",
+        "izSpring",
+        "jxSpring",
+        "jySpring",
+        "jzSpring",
+        "sectionNumber",
+        "p1",
+        "p2",
+        "p3",
+        "isShown",
+        "memberLoads",
+        "cmqLoads"
+      ],
+      "additionalProperties": false
+    },
+    "__type_22": {
+      "type": "object",
+      "properties": {
+        "lengthMethod": {
+          "type": "number"
+        },
+        "type": {
+          "type": "number"
+        },
+        "direction": {
+          "type": "number"
+        },
+        "scale": {
+          "type": "number"
+        },
+        "loadCode": {
+          "type": "string"
+        },
+        "unitLoad": {
+          "type": "number"
+        },
+        "p1": {
+          "type": "number"
+        },
+        "p2": {
+          "type": "number"
+        },
+        "p3": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "lengthMethod",
+        "type",
+        "direction",
+        "scale",
+        "loadCode",
+        "unitLoad",
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "additionalProperties": false
+    },
+    "__type_23": {
+      "type": "object",
+      "properties": {
+        "moy": {
+          "type": "number"
+        },
+        "moz": {
+          "type": "number"
+        },
+        "iMy": {
+          "type": "number"
+        },
+        "iMz": {
+          "type": "number"
+        },
+        "iQx": {
+          "type": "number"
+        },
+        "iQy": {
+          "type": "number"
+        },
+        "iQz": {
+          "type": "number"
+        },
+        "jMy": {
+          "type": "number"
+        },
+        "jMz": {
+          "type": "number"
+        },
+        "jQx": {
+          "type": "number"
+        },
+        "jQy": {
+          "type": "number"
+        },
+        "jQz": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "moy",
+        "moz",
+        "iMy",
+        "iMz",
+        "iQx",
+        "iQy",
+        "iQz",
+        "jMy",
+        "jMz",
+        "jQx",
+        "jQy",
+        "jQz"
+      ],
+      "additionalProperties": false
+    },
+    "__type_24": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "materialNumber": {
+          "type": "number"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "const": 0,
+              "type": "number"
+            },
+            {
+              "const": 1,
+              "type": "number"
+            },
+            {
+              "const": 2,
+              "type": "number"
+            },
+            {
+              "const": 3,
+              "type": "number"
+            },
+            {
+              "const": 4,
+              "type": "number"
+            },
+            {
+              "const": 5,
+              "type": "number"
+            }
+          ]
+        },
+        "shape": {
+          "anyOf": [
+            {
+              "const": 0,
+              "type": "number"
+            },
+            {
+              "const": 1,
+              "type": "number"
+            },
+            {
+              "const": 2,
+              "type": "number"
+            },
+            {
+              "const": 3,
+              "type": "number"
+            },
+            {
+              "const": 4,
+              "type": "number"
+            },
+            {
+              "const": 5,
+              "type": "number"
+            },
+            {
+              "const": 6,
+              "type": "number"
+            }
+          ]
+        },
+        "p1_A": {
+          "type": "number"
+        },
+        "p2_Ix": {
+          "type": "number"
+        },
+        "torsionConstant": {
+          "type": "number"
+        },
+        "p3_Iy": {
+          "type": "number"
+        },
+        "p4_Iz": {
+          "type": "number"
+        },
+        "ky": {
+          "type": "number"
+        },
+        "kz": {
+          "type": "number"
+        },
+        "comment": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "materialNumber",
+        "type",
+        "shape",
+        "p1_A",
+        "p2_Ix",
+        "torsionConstant",
+        "p3_Iy",
+        "p4_Iz",
+        "ky",
+        "kz",
+        "comment"
+      ],
+      "additionalProperties": false
+    },
+    "__type_25": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "young": {
+          "type": "number"
+        },
+        "shear": {
+          "type": "number"
+        },
+        "expansion": {
+          "type": "number"
+        },
+        "poisson": {
+          "type": "number"
+        },
+        "unitLoad": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "young",
+        "shear",
+        "expansion",
+        "poisson",
+        "unitLoad",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "__type_26": {
+      "type": "object",
+      "properties": {
+        "nodeNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "deltaX": {
+          "type": "number"
+        },
+        "deltaY": {
+          "type": "number"
+        },
+        "deltaZ": {
+          "type": "number"
+        },
+        "thetaX": {
+          "type": "number"
+        },
+        "thetaY": {
+          "type": "number"
+        },
+        "thetaZ": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "nodeNumber",
+        "deltaX",
+        "deltaY",
+        "deltaZ",
+        "thetaX",
+        "thetaY",
+        "thetaZ"
+      ],
+      "additionalProperties": false
+    },
+    "__type_27": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "method": {
+          "type": "number"
+        },
+        "kTheta": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "number",
+        "method",
+        "kTheta"
+      ],
+      "additionalProperties": false
+    },
+    "__type_28": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "leftBottomNode": {
+          "type": "number"
+        },
+        "rightBottomNode": {
+          "type": "number"
+        },
+        "leftTopNode": {
+          "type": "number"
+        },
+        "rightTopNode": {
+          "type": "number"
+        },
+        "materialNumber": {
+          "type": "number"
+        },
+        "method": {
+          "type": "number"
+        },
+        "p1": {
+          "type": "number"
+        },
+        "p2": {
+          "type": "number"
+        },
+        "p3": {
+          "type": "number"
+        },
+        "p4": {
+          "type": "number"
+        },
+        "isShown": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "number",
+        "leftBottomNode",
+        "rightBottomNode",
+        "leftTopNode",
+        "rightTopNode",
+        "materialNumber",
+        "method",
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "isShown"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

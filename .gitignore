@@ -28,3 +28,9 @@ npm-debug.log*
 
 # Vitest
 coverage/
+
+# Browser test artifacts
+playwright-report/
+test-results/
+.benchmark-baseline/
+__pycache__/

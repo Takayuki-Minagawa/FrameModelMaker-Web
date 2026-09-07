@@ -1,0 +1,45 @@
+
+schema_version: '1'
+units:
+  length: mm
+  force: N
+  stress: N/mm^2
+  area: mm^2
+  second_moment: mm^4
+model:
+  name: yaml-sample
+  ndm: 3
+  ndf: 6
+  nodes:
+    - { tag: 1, x: 0, y: 0, z: 0 }
+    - { tag: 2, x: 1000, y: 0, z: 0 }
+    - { tag: 3, x: 1000, y: 0, z: 0 }
+    - { tag: 4, x: 1000, y: 1000, z: 0 }
+    - { tag: 5, x: 1000.5, y: 0, z: 0 }
+  supports:
+    - { node_tag: 1, dofs: [ux, uy, uz, rx, ry, rz] }
+    - { node_tag: 2, dofs: [ux, rz] }
+    - { node_tag: 99, dofs: [ux] }
+  materials:
+    steel:
+      type: ElasticMaterial
+      tag: 1
+      elastic_modulus: 205000
+      shear_modulus: 79000
+  sections:
+    B:
+      area: 20000
+      inertia_y: 66700000
+      inertia_z: 16700000
+      torsion_constant: 20000000
+      shear_area_y: 16000
+      shear_area_z: 12000
+  elements:
+    - { type: elasticTimoshenkoBeam3D, tag: 1001, node_i: 1, node_j: 2, material_ref: steel, section_ref: B }
+    - { type: truss3D, tag: 2001, node_i: 2, node_j: 4, material_ref: steel }
+    - { type: twoNodeLink3D, tag: 3001, node_i: 2, node_j: 3, dir: [ry], stiffness: [200000000] }
+    - { type: twoNodeLink3D, tag: 3002, node_i: 2, node_j: 5, dir: [ry], stiffness: [200000000] }
+    - { type: elasticTimoshenkoBeam3D, tag: 4001, node_i: 2, node_j: 3, material_ref: steel, section_ref: B }
+    - { type: elasticTimoshenkoBeam3D, tag: 5001, node_i: 2, node_j: 99, material_ref: steel, section_ref: B }
+load_cases: []
+load_combinations: []

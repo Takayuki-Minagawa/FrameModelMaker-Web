@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://takayuki-minagawa.github.io/FrameModelMaker-Web/schemas/results-v1.schema.json",
+  "title": "AnalysisResult",
+  "description": "Canonical serialized output. Legacy input aliases and defaults are handled by the application parser.",
+  "$ref": "#/$defs/AnalysisResult_1",
+  "$defs": {
+    "AnalysisResult_1": {
+      "type": "object",
+      "properties": {
+        "formatVersion": {
+          "const": 1,
+          "type": "number"
+        },
+        "title": {
+          "type": "string"
+        },
+        "modelFingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "units": {
+          "$ref": "#/$defs/AnalysisResultUnits_2"
+        },
+        "coordinateSystem": {
+          "const": "global-xyz",
+          "type": "string"
+        },
+        "nodeReactionSystem": {
+          "const": "global-xyz",
+          "type": "string"
+        },
+        "memberForceSystem": {
+          "const": "local-xyz",
+          "type": "string"
+        },
+        "loadCaseId": {
+          "type": "string"
+        },
+        "combinationId": {
+          "type": "string"
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AnalysisResultFrame_3"
+          },
+          "minItems": 1
+        },
+        "metadata": {
+          "$ref": "#/$defs/Record_9"
+        }
+      },
+      "required": [
+        "formatVersion",
+        "title",
+        "units",
+        "coordinateSystem",
+        "nodeReactionSystem",
+        "memberForceSystem",
+        "frames"
+      ],
+      "additionalProperties": false
+    },
+    "AnalysisResultUnits_2": {
+      "type": "object",
+      "properties": {
+        "length": {
+          "const": "cm",
+          "type": "string"
+        },
+        "force": {
+          "const": "kN",
+          "type": "string"
+        },
+        "moment": {
+          "const": "kN-cm",
+          "type": "string"
+        },
+        "time": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "length",
+        "force",
+        "moment"
+      ],
+      "additionalProperties": false
+    },
+    "AnalysisResultFrame_3": {
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "number"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NodeAnalysisResult_4"
+          }
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemberAnalysisResult_7"
+          }
+        }
+      },
+      "required": [
+        "time",
+        "nodes",
+        "members"
+      ],
+      "additionalProperties": false
+    },
+    "NodeAnalysisResult_4": {
+      "type": "object",
+      "properties": {
+        "nodeNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "displacement": {
+          "$ref": "#/$defs/ResultVector3_5"
+        },
+        "rotation": {
+          "$ref": "#/$defs/ResultVector3_5"
+        },
+        "reaction": {
+          "$ref": "#/$defs/ResultForce6_6"
+        }
+      },
+      "required": [
+        "nodeNumber",
+        "displacement",
+        "rotation"
+      ],
+      "additionalProperties": false
+    },
+    "ResultVector3_5": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "additionalProperties": false
+    },
+    "ResultForce6_6": {
+      "type": "object",
+      "properties": {
+        "axial": {
+          "type": "number"
+        },
+        "shearY": {
+          "type": "number"
+        },
+        "shearZ": {
+          "type": "number"
+        },
+        "torsion": {
+          "type": "number"
+        },
+        "momentY": {
+          "type": "number"
+        },
+        "momentZ": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "axial",
+        "shearY",
+        "shearZ",
+        "torsion",
+        "momentY",
+        "momentZ"
+      ],
+      "additionalProperties": false
+    },
+    "MemberAnalysisResult_7": {
+      "type": "object",
+      "properties": {
+        "memberNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "iEnd": {
+          "$ref": "#/$defs/ResultForce6_6"
+        },
+        "jEnd": {
+          "$ref": "#/$defs/ResultForce6_6"
+        },
+        "stations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Object_8"
+          },
+          "minItems": 2
+        }
+      },
+      "required": [
+        "memberNumber",
+        "iEnd",
+        "jEnd"
+      ],
+      "additionalProperties": false
+    },
+    "Object_8": {
+      "type": "object",
+      "properties": {
+        "axial": {
+          "type": "number"
+        },
+        "shearY": {
+          "type": "number"
+        },
+        "shearZ": {
+          "type": "number"
+        },
+        "torsion": {
+          "type": "number"
+        },
+        "momentY": {
+          "type": "number"
+        },
+        "momentZ": {
+          "type": "number"
+        },
+        "position": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "axial",
+        "shearY",
+        "shearZ",
+        "torsion",
+        "momentY",
+        "momentZ",
+        "position"
+      ],
+      "additionalProperties": false
+    },
+    "Record_9": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "const": false,
+            "type": "boolean"
+          },
+          {
+            "const": true,
+            "type": "boolean"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,118 @@
+{
+  "formatVersion": 1,
+  "title": "Analytical cantilever reference",
+  "modelFingerprint": "sha256:2a86133c796a7fde7b6aa757140b578545d214232352636ebb89c6c177282bb5",
+  "units": {
+    "length": "cm",
+    "force": "kN",
+    "moment": "kN-cm",
+    "time": "s"
+  },
+  "coordinateSystem": "global-xyz",
+  "nodeReactionSystem": "global-xyz",
+  "memberForceSystem": "local-xyz",
+  "frames": [
+    {
+      "time": 1,
+      "nodes": [
+        {
+          "nodeNumber": 1,
+          "displacement": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "reaction": {
+            "axial": 0,
+            "shearY": 1,
+            "shearZ": 0,
+            "torsion": 0,
+            "momentY": 0,
+            "momentZ": 100
+          }
+        },
+        {
+          "nodeNumber": 2,
+          "displacement": {
+            "x": 0,
+            "y": -0.3333333333333333,
+            "z": 0
+          },
+          "rotation": {
+            "x": 0,
+            "y": 0,
+            "z": -0.005
+          },
+          "reaction": {
+            "axial": 0,
+            "shearY": 0,
+            "shearZ": 0,
+            "torsion": 0,
+            "momentY": 0,
+            "momentZ": 0
+          }
+        }
+      ],
+      "members": [
+        {
+          "memberNumber": 1,
+          "iEnd": {
+            "axial": 0,
+            "shearY": -1,
+            "shearZ": 0,
+            "torsion": 0,
+            "momentY": 0,
+            "momentZ": -100
+          },
+          "jEnd": {
+            "axial": 0,
+            "shearY": -1,
+            "shearZ": 0,
+            "torsion": 0,
+            "momentY": 0,
+            "momentZ": 0
+          },
+          "stations": [
+            {
+              "axial": 0,
+              "shearY": -1,
+              "shearZ": 0,
+              "torsion": 0,
+              "momentY": 0,
+              "momentZ": -100,
+              "position": 0
+            },
+            {
+              "axial": 0,
+              "shearY": -1,
+              "shearZ": 0,
+              "torsion": 0,
+              "momentY": 0,
+              "momentZ": -50,
+              "position": 0.5
+            },
+            {
+              "axial": 0,
+              "shearY": -1,
+              "shearZ": 0,
+              "torsion": 0,
+              "momentY": 0,
+              "momentZ": 0,
+              "position": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "solver": "OpenSees",
+    "elementType": "elasticBeamColumn3D",
+    "forceConvention": "positive-x-cut-face"
+  }
+}

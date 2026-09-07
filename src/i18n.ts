@@ -1,3 +1,4 @@
+import { settings } from './services/SettingsRepository';
 export type Lang = 'ja' | 'en';
 
 const messages: Record<Lang, Record<string, string>> = {
@@ -506,7 +507,7 @@ const messages: Record<Lang, Record<string, string>> = {
   },
 };
 
-let currentLang: Lang = (localStorage.getItem('lang') as Lang) || 'ja';
+let currentLang: Lang = settings.choice('lang', ['ja', 'en'] as const, 'ja');
 
 /** 現在の言語を取得 */
 export function getLang(): Lang {
@@ -516,7 +517,7 @@ export function getLang(): Lang {
 /** 言語を設定（localStorage に保存） */
 export function setLang(lang: Lang): void {
   currentLang = lang;
-  localStorage.setItem('lang', lang);
+  settings.setItem('lang', lang);
   document.documentElement.lang = lang;
 }
 
