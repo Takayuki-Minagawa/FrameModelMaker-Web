@@ -1,0 +1,152 @@
+{
+  "formatVersion": 2,
+  "title": "Cantilever verification: cm-kN",
+  "loadCaseCount": 1,
+  "loadCaseIndex": 0,
+  "calcCaseMemo": [],
+  "loadCases": [
+    {
+      "id": "LC1",
+      "name": "Load Case 1",
+      "type": "other",
+      "memo": ""
+    }
+  ],
+  "loadCombinations": [],
+  "analysisMetadata": null,
+  "nodes": [
+    {
+      "number": 1,
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "temperature": 0,
+      "intensityGroup": 0,
+      "longWeight": 0,
+      "forceWeight": 0,
+      "addForceWeight": 0,
+      "area": 0,
+      "isShown": true,
+      "loads": [
+        {
+          "p1": 0,
+          "p2": 0,
+          "p3": 0,
+          "m1": 0,
+          "m2": 0,
+          "m3": 0
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "x": 100,
+      "y": 0,
+      "z": 0,
+      "temperature": 0,
+      "intensityGroup": 0,
+      "longWeight": 0,
+      "forceWeight": 0,
+      "addForceWeight": 0,
+      "area": 0,
+      "isShown": true,
+      "loads": [
+        {
+          "p1": 0,
+          "p2": -1,
+          "p3": 0,
+          "m1": 0,
+          "m2": 0,
+          "m3": 0
+        }
+      ]
+    }
+  ],
+  "members": [
+    {
+      "number": 1,
+      "iNodeNumber": 1,
+      "jNodeNumber": 2,
+      "ixSpring": 0,
+      "iySpring": 0,
+      "izSpring": 0,
+      "jxSpring": 0,
+      "jySpring": 0,
+      "jzSpring": 0,
+      "sectionNumber": 1,
+      "p1": 0,
+      "p2": 0,
+      "p3": 0,
+      "isShown": true,
+      "memberLoads": [
+        {
+          "lengthMethod": 0,
+          "type": 0,
+          "direction": 0,
+          "scale": 0,
+          "loadCode": "",
+          "unitLoad": 0,
+          "p1": 0,
+          "p2": 0,
+          "p3": 0
+        }
+      ],
+      "cmqLoads": [
+        {
+          "moy": 0,
+          "moz": 0,
+          "iMy": 0,
+          "iMz": 0,
+          "iQx": 0,
+          "iQy": 0,
+          "iQz": 0,
+          "jMy": 0,
+          "jMz": 0,
+          "jQx": 0,
+          "jQy": 0,
+          "jQz": 0
+        }
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "number": 1,
+      "materialNumber": 1,
+      "type": 0,
+      "shape": 0,
+      "p1_A": 10,
+      "p2_Ix": 0,
+      "torsionConstant": 100,
+      "p3_Iy": 50,
+      "p4_Iz": 50,
+      "ky": 0,
+      "kz": 0,
+      "comment": ""
+    }
+  ],
+  "materials": [
+    {
+      "number": 1,
+      "young": 20000,
+      "shear": 8000,
+      "expansion": 0,
+      "poisson": 0,
+      "unitLoad": 0,
+      "name": "Verification"
+    }
+  ],
+  "boundaries": [
+    {
+      "nodeNumber": 1,
+      "deltaX": 1,
+      "deltaY": 1,
+      "deltaZ": 1,
+      "thetaX": 1,
+      "thetaY": 1,
+      "thetaZ": 1
+    }
+  ],
+  "springs": [],
+  "walls": []
+}

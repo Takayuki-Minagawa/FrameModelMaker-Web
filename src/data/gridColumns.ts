@@ -1,4 +1,7 @@
-{
+import type { TabRows } from '../app/TabProviders';
+
+type Config = { header?: string; width?: string; type?: 'number' | 'text' | 'int'; readOnly?: boolean };
+export default {
   "nodes": [
     { "key": "number", "width": "60px", "type": "int" },
     { "key": "x", "width": "90px", "type": "number" },
@@ -112,4 +115,4 @@
     { "key": "p2", "width": "80px", "type": "number" },
     { "key": "p3", "width": "80px", "type": "number" }
   ]
-}
+} satisfies { [K in keyof TabRows]: (Config & { key: keyof TabRows[K] & string })[] };

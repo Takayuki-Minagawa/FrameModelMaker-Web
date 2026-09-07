@@ -962,3 +962,8 @@ select:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Virtual rows keep a fixed height; error text remains available to assistive
+   technology and via the cell's title without changing the scroll geometry. */
+.data-grid-virtual tbody tr[data-row-index] { height: 34px; }
+.data-grid-virtual .data-grid-cell-error { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

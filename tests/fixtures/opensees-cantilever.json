@@ -1,0 +1,109 @@
+{
+  "format": "opensees-recorder-v1",
+  "forceConvention": "local-end-resisting",
+  "modelFingerprint": "sha256:2a86133c796a7fde7b6aa757140b578545d214232352636ebb89c6c177282bb5",
+  "title": "OpenSees cantilever",
+  "units": {
+    "length": "cm",
+    "force": "kN",
+    "time": "s"
+  },
+  "nodes": [
+    {
+      "tag": 1,
+      "nodeNumber": 1,
+      "coordinates": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "tag": 2,
+      "nodeNumber": 2,
+      "coordinates": [
+        100.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "members": [
+    {
+      "tag": 1,
+      "memberNumber": 1,
+      "nodeI": 1,
+      "nodeJ": 2,
+      "localY": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "type": "elasticBeamColumn3D"
+    }
+  ],
+  "frames": [
+    {
+      "time": 1.0,
+      "nodes": [
+        {
+          "tag": 1,
+          "displacement": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "reaction": [
+            0.0,
+            0.9999999999999994,
+            0.0,
+            0.0,
+            0.0,
+            99.99999999999997
+          ]
+        },
+        {
+          "tag": 2,
+          "displacement": [
+            0.0,
+            -0.3333333333333333,
+            0.0,
+            0.0,
+            0.0,
+            -0.005
+          ],
+          "reaction": [
+            0.0,
+            5.551115123125783e-16,
+            0.0,
+            0.0,
+            0.0,
+            -2.842170943040401e-14
+          ]
+        }
+      ],
+      "members": [
+        {
+          "tag": 1,
+          "localForce": [
+            0.0,
+            0.9999999999999994,
+            0.0,
+            -0.0,
+            0.0,
+            99.99999999999997,
+            0.0,
+            -0.9999999999999994,
+            0.0,
+            0.0,
+            0.0,
+            -2.842170943040401e-14
+          ]
+        }
+      ]
+    }
+  ]
+}

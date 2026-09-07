@@ -1,0 +1,42 @@
+{
+  "format": "framemodelmaker-binding-v1",
+  "modelFingerprint": "sha256:2a86133c796a7fde7b6aa757140b578545d214232352636ebb89c6c177282bb5",
+  "units": {
+    "length": "cm",
+    "force": "kN",
+    "time": "s"
+  },
+  "nodes": [
+    {
+      "tag": 1,
+      "nodeNumber": 1,
+      "coordinates": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "tag": 2,
+      "nodeNumber": 2,
+      "coordinates": [
+        100,
+        0,
+        0
+      ]
+    }
+  ],
+  "members": [
+    {
+      "tag": 1,
+      "memberNumber": 1,
+      "nodeI": 1,
+      "nodeJ": 2,
+      "localY": [
+        0,
+        1,
+        0
+      ]
+    }
+  ]
+}

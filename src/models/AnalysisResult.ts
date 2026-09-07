@@ -24,6 +24,7 @@ export interface MemberAnalysisResult {
   memberNumber: number;
   iEnd: ResultForce6;
   jEnd: ResultForce6;
+  stations?: Array<ResultForce6 & { position: number }>;
 }
 
 export interface AnalysisResultFrame {
@@ -42,6 +43,7 @@ export interface AnalysisResultUnits {
 export interface AnalysisResult {
   formatVersion: 1;
   title: string;
+  modelFingerprint?: string;
   units: AnalysisResultUnits;
   coordinateSystem: 'global-xyz';
   nodeReactionSystem: 'global-xyz';
@@ -131,6 +133,21 @@ function force(value: unknown, path: string): ResultForce6 {
   };
 }
 
+function parseStations(value: unknown): Array<ResultForce6 & { position: number }> {
+  const stations = optionalArray(value, 'stations').map((item, index) => {
+    const raw = requiredObject(item, `stations[${index}]`);
+    if (typeof raw.position !== 'number') throw new Error('Station position is required.');
+    const position = finite(raw.position, 'station.position');
+    if (position < 0 || position > 1) throw new Error('Station position must be between 0 and 1.');
+    return { ...force(raw, `stations[${index}]`), position };
+  });
+  if (stations.length < 2 || stations[0].position !== 0 || stations[stations.length - 1].position !== 1
+    || stations.some((station, index) => index > 0 && station.position <= stations[index - 1].position)) {
+    throw new Error('Stations must increase strictly from 0 to 1 and include both ends.');
+  }
+  return stations;
+}
+
 function parseFrame(value: unknown, index: number): AnalysisResultFrame {
   const framePath = `frames[${index}]`;
   const raw = requiredObject(value, framePath);
@@ -146,11 +163,22 @@ function parseFrame(value: unknown, index: number): AnalysisResultFrame {
   });
   const members = optionalArray(raw.members ?? raw.memberResults, `${framePath}.members`).map((item, memberIndex) => {
     const member = requiredObject(item, `${framePath}.members[${memberIndex}]`);
-    return {
+    const parsed: MemberAnalysisResult = {
       memberNumber: integer(member.memberNumber ?? member.member ?? member.tag, `frames[${index}].members[${memberIndex}].memberNumber`),
       iEnd: force(member.iEnd ?? member.i, `frames[${index}].members[${memberIndex}].iEnd`),
       jEnd: force(member.jEnd ?? member.j, `frames[${index}].members[${memberIndex}].jEnd`),
+      ...(member.stations != null ? { stations: parseStations(member.stations) } : {}),
     };
+    if (parsed.stations) {
+      for (const [station, end] of [[parsed.stations[0], parsed.iEnd], [parsed.stations[parsed.stations.length - 1], parsed.jEnd]] as const) {
+        for (const key of ['axial', 'shearY', 'shearZ', 'torsion', 'momentY', 'momentZ'] as const) {
+          if (Math.abs(station[key] - end[key]) > 1e-8 * Math.max(1, Math.abs(end[key]))) {
+            throw new Error(`Station endpoint disagrees with member ${parsed.memberNumber} ${key}.`);
+          }
+        }
+      }
+    }
+    return parsed;
   });
   const duplicateNode = nodes.find((node, nodeIndex) => nodes.findIndex(item => item.nodeNumber === node.nodeNumber) !== nodeIndex);
   if (duplicateNode) throw new Error(`Invalid analysis result: ${framePath} duplicates node ${duplicateNode.nodeNumber}.`);
@@ -195,6 +223,7 @@ export function parseAnalysisResult(text: string): AnalysisResult {
     moment: requiredConvention(unitsRaw.moment, 'units.moment', 'kN-cm'),
     ...(typeof unitsRaw.time === 'string' && unitsRaw.time.trim() !== '' ? { time: unitsRaw.time } : {}),
   };
+  if (raw.modelFingerprint != null && (typeof raw.modelFingerprint !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(raw.modelFingerprint))) throw new Error('Invalid model fingerprint.');
   const metadataRaw = raw.metadata == null ? {} : requiredObject(raw.metadata, 'metadata');
   const metadata: Record<string, string | number | boolean | null> = {};
   for (const [key, item] of Object.entries(metadataRaw)) {
@@ -205,6 +234,7 @@ export function parseAnalysisResult(text: string): AnalysisResult {
   return {
     formatVersion: 1,
     title: typeof raw.title === 'string' ? raw.title : '',
+    ...(typeof raw.modelFingerprint === 'string' ? { modelFingerprint: raw.modelFingerprint } : {}),
     units,
     coordinateSystem: requiredConvention(raw.coordinateSystem, 'coordinateSystem', 'global-xyz'),
     nodeReactionSystem: requiredConvention(raw.nodeReactionSystem, 'nodeReactionSystem', 'global-xyz'),

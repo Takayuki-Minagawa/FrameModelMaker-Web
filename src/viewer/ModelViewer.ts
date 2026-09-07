@@ -3,6 +3,10 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FrameDocument } from '../models/FrameDocument';
 import type { Member } from '../models/Member';
 import type { Node } from '../models/Node';
+import { createLocalAxesLayer } from './LocalAxesLayer';
+import { drawResultGeometry } from './ResultGeometry';
+import { captureCamera, fitCamera, restoreCamera } from './ViewerCamera';
+import { clientPointToViewport } from './ViewerInput';
 import {
   calculateBounds,
   colorForKey,
@@ -13,6 +17,7 @@ import {
   type Bounds3,
   type LabelCandidate,
 } from './ViewerMath';
+import { disposeObject3D } from './ViewerResources';
 import type {
   AnalysisResultFrame,
   AnalysisResultSet,
@@ -38,6 +43,7 @@ import type {
   ViewerSelection,
   ViewMode,
 } from './ViewerTypes';
+export { clientPointToViewport, hasDrawableMemberSpan } from './ViewerInput';
 
 export type {
   AnalysisResultFrame,
@@ -61,7 +67,7 @@ export type {
   ViewerGlyph,
   ViewerLayers,
   ViewerSelection,
-  ViewMode,
+  ViewMode
 } from './ViewerTypes';
 
 const CAMERA_FOV = 45;
@@ -157,58 +163,6 @@ const DEFAULT_RESULT_OPTIONS: ResultDisplayOptions = {
   sectionForceScale: 1,
 };
 
-interface ClientRectLike {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-interface CartesianPointLike {
-  x: number;
-  y: number;
-  z: number;
-}
-
-/** Convert CSS client coordinates to the viewer's logical pixel coordinates. */
-export function clientPointToViewport(
-  clientX: number,
-  clientY: number,
-  rect: ClientRectLike,
-  viewportWidth: number,
-  viewportHeight: number,
-): { x: number; y: number } | null {
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
-  if (
-    ![x, y, rect.width, rect.height, viewportWidth, viewportHeight].every(Number.isFinite)
-    || rect.width <= 0
-    || rect.height <= 0
-    || viewportWidth <= 0
-    || viewportHeight <= 0
-    || x < 0
-    || y < 0
-    || x > rect.width
-    || y > rect.height
-  ) return null;
-  return {
-    x: x * viewportWidth / rect.width,
-    y: y * viewportHeight / rect.height,
-  };
-}
-
-/** Defensive geometry guard for result diagrams, which may receive invalid models. */
-export function hasDrawableMemberSpan(
-  i: CartesianPointLike,
-  j: CartesianPointLike,
-): boolean {
-  const dx = j.x - i.x;
-  const dy = j.y - i.y;
-  const dz = j.z - i.z;
-  const lengthSq = dx * dx + dy * dy + dz * dz;
-  return Number.isFinite(lengthSq) && lengthSq > 1e-12;
-}
-
 interface OverlayLabel {
   position: THREE.Vector3;
   text: string;
@@ -236,6 +190,8 @@ type ViewerCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
  */
 export class ModelViewer {
   private readonly scene = new THREE.Scene();
+  private localAxesLayer: THREE.Group | null = null;
+  private localAxesVisible = false;
   private camera: ViewerCamera;
   private readonly renderer: THREE.WebGLRenderer;
   private controls: OrbitControls;
@@ -481,10 +437,38 @@ export class ModelViewer {
     this.drawBoundaries();
     this.drawLoads();
     this.drawResults();
+    this.drawLocalAxes();
     if (fitToView) this.fitToView();
     else if (cameraState) this.restoreCameraState(cameraState);
     this.applyLayerVisibility();
     this.invalidate();
+  }
+
+  /** Attribute edits do not recreate unrelated geometry or change the camera. */
+  updateAttributes(kind: 'loads' | 'boundaries' | 'members'): void {
+    if (this.disposed) return;
+    if (kind === 'loads') this.redrawLoads();
+    if (kind === 'boundaries') { this.clearGroup(this.boundaryGroup); this.drawBoundaries(); }
+    if (kind === 'members') { this.clearGroup(this.memberGroup); this.drawMembers(); }
+    this.applyLayerVisibility(); this.invalidate();
+  }
+
+  setLocalAxesVisible(visible: boolean): void {
+    this.localAxesVisible = visible; this.drawLocalAxes(); this.invalidate();
+  }
+
+  getLocalAxesVisible(): boolean { return this.localAxesVisible; }
+
+  private drawLocalAxes(): void {
+    if (this.localAxesLayer) { this.scene.remove(this.localAxesLayer); this.disposeObject3D(this.localAxesLayer); this.localAxesLayer = null; }
+    if (this.localAxesVisible && this.layers.members) {
+      this.localAxesLayer = createLocalAxesLayer(this.doc, this.getSymbolSize(), this.selectionDisplayMode === 'selected-only' ? (this.selectedMemberNumber ?? -1) : undefined);
+      this.scene.add(this.localAxesLayer);
+    }
+  }
+
+  getPerformanceInfo(): { calls: number; geometries: number; textures: number } {
+    return { calls: this.renderer.info.render.calls, geometries: this.renderer.info.memory.geometries, textures: this.renderer.info.memory.textures };
   }
 
   fitToView(): void {
@@ -610,66 +594,17 @@ export class ModelViewer {
     this.invalidate();
   }
 
-  getCameraState(): ViewerCameraState {
-    return {
-      projection: this.projectionMode,
-      position: this.camera.position.toArray() as Vector3Tuple,
-      target: this.controls.target.toArray() as Vector3Tuple,
-      up: this.camera.up.toArray() as Vector3Tuple,
-      zoom: this.camera.zoom,
-      orthographicHeight: this.camera instanceof THREE.OrthographicCamera
-        ? this.camera.top - this.camera.bottom
-        : undefined,
-    };
-  }
-
+  getCameraState(): ViewerCameraState { return captureCamera({ camera: this.camera, controls: this.controls, projectionMode: this.projectionMode, getAspect: () => this.getAspect() }); }
   restoreCameraState(state: ViewerCameraState): void {
     if (state.projection !== this.projectionMode) this.setProjectionMode(state.projection);
-    this.camera.position.fromArray(state.position);
-    this.camera.up.fromArray(state.up);
-    this.camera.zoom = Math.max(state.zoom, Number.EPSILON);
-    if (this.camera instanceof THREE.OrthographicCamera && state.orthographicHeight) {
-      const halfHeight = Math.max(state.orthographicHeight / 2, Number.EPSILON);
-      this.camera.top = halfHeight;
-      this.camera.bottom = -halfHeight;
-      this.camera.left = -halfHeight * this.getAspect();
-      this.camera.right = halfHeight * this.getAspect();
-    }
-    this.controls.target.fromArray(state.target);
-    this.camera.updateProjectionMatrix();
-    this.controls.update();
-    this.invalidate();
+    restoreCamera({ camera: this.camera, controls: this.controls, projectionMode: this.projectionMode, getAspect: () => this.getAspect() }, state); this.invalidate();
   }
-
-  private fitBounds(bounds: Bounds3, padding: number = 1.35): void {
-    const target = new THREE.Vector3(...bounds.center);
-    const radius = Math.max(bounds.maxDimension / 2, 50) * padding;
-    let direction = this.camera.position.clone().sub(this.controls.target);
-    if (direction.lengthSq() < 1e-12) direction.set(1, -1.2, 0.8);
-    direction.normalize();
-    this.controls.target.copy(target);
-
-    if (this.camera instanceof THREE.PerspectiveCamera) {
-      const distance = radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2));
-      this.camera.position.copy(target).addScaledVector(direction, distance);
-    } else {
-      const halfHeight = radius;
-      const aspect = this.getAspect();
-      this.camera.left = -halfHeight * aspect;
-      this.camera.right = halfHeight * aspect;
-      this.camera.top = halfHeight;
-      this.camera.bottom = -halfHeight;
-      this.camera.zoom = 1;
-      this.camera.position.copy(target).addScaledVector(direction, Math.max(radius * 3, 100));
-    }
-    this.camera.updateProjectionMatrix();
-    this.camera.lookAt(target);
-    this.controls.update();
-    this.invalidate();
-  }
+  private fitBounds(bounds: Bounds3, padding = 1.35): void { fitCamera({ camera: this.camera, controls: this.controls, projectionMode: this.projectionMode, getAspect: () => this.getAspect() }, bounds, padding); this.invalidate(); }
 
   setLayerVisibility(layers: Partial<ViewerLayers>): void {
+    const membersChanged = layers.members != null && layers.members !== this.layers.members;
     this.layers = { ...this.layers, ...layers };
+    if (membersChanged && this.localAxesVisible) this.drawLocalAxes();
     this.applyLayerVisibility();
     this.invalidate();
   }
@@ -679,6 +614,7 @@ export class ModelViewer {
   }
 
   private applyLayerVisibility(): void {
+    if (this.localAxesLayer) this.localAxesLayer.visible = this.layers.members;
     this.grid.visible = this.layers.grid;
     this.axes.visible = this.layers.axes;
     const hasResultFrame = !!this.analysisResults?.frames[this.resultFrameIndex];
@@ -1269,156 +1205,23 @@ export class ModelViewer {
   }
 
   private drawResults(): void {
-    const frame = this.analysisResults?.frames[this.resultFrameIndex];
-    if (!frame) return;
-    const nodeResults = new Map(frame.nodes.map(result => [result.nodeNumber, result] as const));
-    const deformedPosition = (nodeNumber: number): THREE.Vector3 | null => {
-      const node = this.nodeIndex.get(nodeNumber);
-      if (!node) return null;
-      const displacement = nodeResults.get(nodeNumber)?.displacement ?? [0, 0, 0];
-      return new THREE.Vector3(node.x, node.y, node.z).addScaledVector(
-        new THREE.Vector3(...displacement),
-        this.resultOptions.deformationScale,
-      );
-    };
-
-    if (this.resultOptions.showDeformation) {
-      const positions: number[] = [];
-      const nodePositions: number[] = [];
-      for (const node of this.doc.nodes) {
-        if (!node.isShown) continue;
-        const position = deformedPosition(node.number);
-        if (position) nodePositions.push(...position.toArray());
-      }
-      for (const member of this.doc.members) {
-        if (!member.isShown) continue;
-        const i = deformedPosition(member.iNodeNumber);
-        const j = deformedPosition(member.jNodeNumber);
-        if (!i || !j) continue;
-        positions.push(...i.toArray(), ...j.toArray());
-      }
-      if (positions.length > 0) {
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        this.resultGroup.add(new THREE.LineSegments(
-          geometry,
-          new THREE.LineBasicMaterial({ color: COLORS.result }),
-        ));
-      }
-      if (nodePositions.length > 0) {
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(nodePositions, 3));
-        this.resultGroup.add(new THREE.Points(
-          geometry,
-          new THREE.PointsMaterial({ color: COLORS.result, size: NODE_POINT_SIZE, sizeAttenuation: false }),
-        ));
-      }
-    }
-
-    if (this.resultOptions.showReactions) {
-      const symbolSize = this.getSymbolSize();
-      for (const result of frame.nodes) {
-        const node = this.nodeIndex.get(result.nodeNumber);
-        if (!node) continue;
-        const origin = new THREE.Vector3(node.x, node.y, node.z);
-        if (result.reaction) {
-          const reaction = new THREE.Vector3(...result.reaction);
-          if (reaction.lengthSq() > 0) {
-            this.addScaledArrow(
-              origin,
-              reaction,
-              symbolSize,
-              this.resultOptions.reactionScale,
-              COLORS.resultForce,
-              this.resultGroup,
-            );
-          }
-        }
-        if (result.reactionMoment) {
-          const moment = new THREE.Vector3(...result.reactionMoment);
-          if (moment.lengthSq() > 0) {
-            this.drawMomentGlyph(
-              origin,
-              moment,
-              symbolSize * Math.max(this.resultOptions.reactionScale, 0.01),
-              COLORS.resultForce,
-              this.resultGroup,
-            );
-          }
-        }
-      }
-    }
-
-    const forceComponent = this.resultOptions.sectionForce;
-    if (forceComponent) {
-      for (const result of frame.members ?? []) {
-        const member = this.memberIndex.get(result.memberNumber);
-        const iNode = member ? this.nodeIndex.get(member.iNodeNumber) : undefined;
-        const jNode = member ? this.nodeIndex.get(member.jNodeNumber) : undefined;
-        if (!iNode || !jNode || !result.stations || result.stations.length === 0) continue;
-        if (!hasDrawableMemberSpan(iNode, jNode)) continue;
-        const i = new THREE.Vector3(iNode.x, iNode.y, iNode.z);
-        const j = new THREE.Vector3(jNode.x, jNode.y, jNode.z);
-        const localX = j.clone().sub(i).normalize();
-        const localAxisMetadata = this.doc.analysisMetadata?.localAxes[String(result.memberNumber)]
-          ?? this.linkOrientationIndex.get(result.memberNumber);
-        const metadataY = localAxisMetadata?.y && localAxisMetadata.y.length >= 3
-          ? new THREE.Vector3(localAxisMetadata.y[0], localAxisMetadata.y[1], localAxisMetadata.y[2])
-          : null;
-        const metadataVecXZ = localAxisMetadata?.vecxz && localAxisMetadata.vecxz.length >= 3
-          ? new THREE.Vector3(localAxisMetadata.vecxz[0], localAxisMetadata.vecxz[1], localAxisMetadata.vecxz[2])
-          : null;
-        let localY = metadataY?.clone().sub(localX.clone().multiplyScalar(metadataY.dot(localX)));
-        if (!localY || localY.lengthSq() < 1e-12) {
-          localY = metadataVecXZ?.clone().cross(localX);
-        }
-        if (!localY || localY.lengthSq() < 1e-12) {
-          const reference = Math.abs(localX.z) < 0.9
-            ? new THREE.Vector3(0, 0, 1)
-            : new THREE.Vector3(0, 1, 0);
-          localY = reference.cross(localX);
-        }
-        localY.normalize();
-        const localZ = localX.clone().cross(localY).normalize();
-        const diagramAxis = forceComponent === 'shearZ' || forceComponent === 'momentY'
-          ? localZ
-          : localY;
-        const points: THREE.Vector3[] = [];
-        const stems: number[] = [];
-        for (const station of result.stations) {
-          const t = THREE.MathUtils.clamp(station.position, 0, 1);
-          const base = i.clone().lerp(j, t);
-          const value = station[forceComponent] ?? 0;
-          const offset = diagramAxis.clone().multiplyScalar(value * this.resultOptions.sectionForceScale);
-          const tip = base.clone().add(offset);
-          points.push(tip);
-          stems.push(...base.toArray(), ...tip.toArray());
-        }
-        if (points.length > 1) {
-          this.resultGroup.add(new THREE.Line(
-            new THREE.BufferGeometry().setFromPoints(points),
-            new THREE.LineBasicMaterial({ color: COLORS.resultForce }),
-          ));
-        }
-        if (stems.length > 0) {
-          const geometry = new THREE.BufferGeometry();
-          geometry.setAttribute('position', new THREE.Float32BufferAttribute(stems, 3));
-          this.resultGroup.add(new THREE.LineSegments(
-            geometry,
-            new THREE.LineBasicMaterial({ color: COLORS.resultForce, transparent: true, opacity: 0.6 }),
-          ));
-        }
-      }
-    }
-
-    if (frame.time !== undefined) {
-      this.resultLabels.push({
-        position: this.controls.target.clone(),
-        text: `t = ${frame.time}${this.analysisResults?.units?.time ? ` ${this.analysisResults.units.time}` : ''}`,
-        color: this.isDark ? '#ff9ad5' : '#a00064',
-        priority: 100,
-      });
-    }
+    drawResultGeometry({
+      doc: this.doc,
+      analysisResults: this.analysisResults,
+      resultFrameIndex: this.resultFrameIndex,
+      resultOptions: this.resultOptions,
+      nodeIndex: this.nodeIndex,
+      memberIndex: this.memberIndex,
+      linkOrientationIndex: this.linkOrientationIndex,
+      resultGroup: this.resultGroup,
+      controls: this.controls,
+      isDark: this.isDark,
+      resultLabels: this.resultLabels,
+      entityPassesIsolation: this.entityPassesIsolation.bind(this),
+      getSymbolSize: this.getSymbolSize.bind(this),
+      addScaledArrow: this.addScaledArrow.bind(this),
+      drawMomentGlyph: this.drawMomentGlyph.bind(this)
+    });
   }
 
   private addScaledArrow(
@@ -1994,36 +1797,7 @@ export class ModelViewer {
   }
 
   /** Recursively releases geometries, every material, textures and uniforms. */
-  private disposeObject3D(object: THREE.Object3D): void {
-    const geometries = new Set<THREE.BufferGeometry>();
-    const materials = new Set<THREE.Material>();
-    const textures = new Set<THREE.Texture>();
-    object.traverse(child => {
-      const renderable = child as THREE.Object3D & {
-        geometry?: THREE.BufferGeometry;
-        material?: THREE.Material | THREE.Material[];
-      };
-      if (renderable.geometry) geometries.add(renderable.geometry);
-      const childMaterials = Array.isArray(renderable.material)
-        ? renderable.material
-        : renderable.material ? [renderable.material] : [];
-      for (const material of childMaterials) {
-        materials.add(material);
-        for (const value of Object.values(material)) {
-          if (value instanceof THREE.Texture) textures.add(value);
-        }
-        const uniforms = (material as THREE.ShaderMaterial).uniforms;
-        if (uniforms) {
-          for (const uniform of Object.values(uniforms)) {
-            if (uniform.value instanceof THREE.Texture) textures.add(uniform.value);
-          }
-        }
-      }
-    });
-    textures.forEach(texture => texture.dispose());
-    materials.forEach(material => material.dispose());
-    geometries.forEach(geometry => geometry.dispose());
-  }
+  private disposeObject3D(object: THREE.Object3D): void { disposeObject3D(object); }
 
   dispose(): void {
     if (this.disposed) return;

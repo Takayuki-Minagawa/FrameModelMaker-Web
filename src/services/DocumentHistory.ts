@@ -1,8 +1,11 @@
+import { canonicalJson } from '../io/CanonicalJson';
+import { parseFrameJson, toFrameJson } from '../io/FrameJson';
 import { FrameDocument } from '../models/FrameDocument';
-import { parseFrameJson, toFrameJson, writeFrameJson } from '../io/FrameJson';
 
 export interface DocumentHistoryOptions {
   maxEntries?: number;
+  maxBytes?: number;
+  trustChangeNotifications?: boolean;
   /** FrameDocument.notifyChange()を自動記録する。既定true。 */
   trackChanges?: boolean;
 }
@@ -41,16 +44,19 @@ function prepareDocumentSnapshot(document: FrameDocument): {
   const value = toFrameJson(document);
   const comparableValue = { ...value } as unknown as Record<string, unknown>;
   delete comparableValue.loadCaseIndex;
+  comparableValue.analysisMetadata = value.analysisMetadata == null ? null : canonicalJson(value.analysisMetadata);
   return { value, comparisonKey: JSON.stringify(comparableValue) };
 }
 
 function serializePreparedSnapshot(prepared: ReturnType<typeof prepareDocumentSnapshot>): string {
-  return JSON.stringify(prepared.value, null, 2);
+  return JSON.stringify(prepared.value);
 }
 
 export class DocumentHistory {
   private readonly document: FrameDocument;
   private readonly maxEntries: number;
+  private readonly maxBytes: number;
+  private readonly trustChangeNotifications: boolean;
   private readonly trackChanges: boolean;
   private entries: DocumentHistoryEntry[];
   private currentIndex = 0;
@@ -60,11 +66,14 @@ export class DocumentHistory {
   private restoring = false;
   private transactionDepth = 0;
   private transactionLabel = 'Edit';
+  private transactionStartLoadCaseIndex = 0;
   private transactionStartSnapshot: string | null = null;
   private readonly changeListener: () => void;
 
   constructor(document: FrameDocument, options: DocumentHistoryOptions = {}) {
     this.document = document;
+    this.maxBytes = Math.max(1024, options.maxBytes ?? 64 * 1024 * 1024);
+    this.trustChangeNotifications = options.trustChangeNotifications ?? false;
     this.maxEntries = Math.max(2, Math.trunc(options.maxEntries ?? 100));
     this.trackChanges = options.trackChanges ?? true;
     const prepared = prepareDocumentSnapshot(document);
@@ -98,7 +107,7 @@ export class DocumentHistory {
   }
 
   get isDirty(): boolean {
-    return prepareDocumentSnapshot(this.document).comparisonKey !== this.savedComparisonKey;
+    return (this.trustChangeNotifications ? this.currentEntryComparisonKey : prepareDocumentSnapshot(this.document).comparisonKey) !== this.savedComparisonKey;
   }
 
   get length(): number {
@@ -125,14 +134,28 @@ export class DocumentHistory {
       this.entries.splice(0, removeCount);
     }
     this.currentIndex = this.entries.length - 1;
+    this.trimHistory();
     this.currentEntryComparisonKey = prepared.comparisonKey;
     return true;
+  }
+
+  /** Always retain the current checkpoint even if one model exceeds the budget. */
+  private trimHistory(): void {
+    let bytes = this.entries.reduce((sum, entry) => sum + new TextEncoder().encode(entry.snapshot).byteLength, 0);
+    while (this.entries.length > 1 && (bytes > this.maxBytes || this.entries.length > this.maxEntries)) {
+      const index = this.currentIndex > 0 ? 0 : this.entries.length - 1;
+      bytes -= new TextEncoder().encode(this.entries[index].snapshot).byteLength;
+      this.entries.splice(index, 1);
+      if (index < this.currentIndex) this.currentIndex--;
+    }
   }
 
   beginTransaction(label: string = 'Edit'): void {
     if (this.transactionDepth === 0) {
       this.transactionLabel = label;
-      this.transactionStartSnapshot = writeFrameJson(this.document);
+      this.transactionStartLoadCaseIndex = this.document.loadCaseIndex;
+      this.transactionStartSnapshot = this.trustChangeNotifications
+        ? this.entries[this.currentIndex].snapshot : JSON.stringify(toFrameJson(this.document));
     }
     this.transactionDepth++;
   }
@@ -169,6 +192,7 @@ export class DocumentHistory {
     this.restoring = true;
     try {
       parseFrameJson(snapshot, this.document, { mode: 'strict' });
+      this.document.loadCaseIndex = this.transactionStartLoadCaseIndex;
     } finally {
       this.restoring = wasRestoring;
     }
@@ -271,6 +295,7 @@ export class DocumentHistory {
       parseFrameJson(entries[currentIndex].snapshot, this.document, { mode: 'strict' });
       this.entries = entries;
       this.currentIndex = currentIndex;
+      this.trimHistory();
       this.currentEntryComparisonKey = prepareDocumentSnapshot(this.document).comparisonKey;
       this.savedSnapshot = raw.savedSnapshot;
       this.savedComparisonKey = savedComparisonKey;

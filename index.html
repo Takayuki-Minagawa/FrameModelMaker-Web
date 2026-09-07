@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#203247">
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
-  <title>FrameModelMaker-Web v1.1.0</title>
+  <title>FrameModelMaker-Web v1.2.0</title>
 </head>
 <body>
   <header id="menu-bar" data-i18n-aria="aria.applicationMenu">
@@ -16,6 +16,7 @@
         <button id="menu-open" type="button" data-i18n="menu.open"></button>
         <button id="menu-save" type="button" data-i18n="menu.save"></button>
         <button id="menu-export-yaml" type="button" data-i18n="menu.exportYaml"></button>
+        <button id="menu-import-csv" type="button">CSV入力 / Import CSV</button>
         <button id="menu-export-csv" type="button" data-i18n="menu.exportCsv"></button>
         <span class="separator" aria-hidden="true"></span>
         <button id="menu-sample" type="button" data-i18n="menu.sample"></button>
@@ -35,6 +36,7 @@
         <button id="menu-show-node-num" type="button" data-i18n="menu.showNodeNum"></button>
         <button id="menu-show-member-num" type="button" data-i18n="menu.showMemberNum"></button>
         <button id="menu-show-wall-num" type="button" data-i18n="menu.showWallNum"></button>
+        <button id="menu-local-axes" type="button">局所軸 / Local axes</button>
         <button id="menu-toggle-loads" type="button" data-i18n="view.loads"></button>
         <button id="menu-toggle-boundaries" type="button" data-i18n="view.boundaries"></button>
       </div>
@@ -49,6 +51,9 @@
         <button id="menu-sort" type="button" data-i18n="menu.sort"></button>
         <button id="menu-renumber" type="button" data-i18n="menu.renumber"></button>
         <button id="menu-merge" type="button" data-i18n="menu.merge"></button>
+        <button id="menu-pattern" type="button">配列複製 / Pattern copy</button>
+        <button id="menu-frame-template" type="button">骨組生成 / Frame template</button>
+        <button id="menu-bulk-attribute" type="button">一括属性変更 / Bulk edit</button>
         <button id="menu-duplicate" type="button" data-i18n="edit.duplicate"></button>
       </div>
     </details>
@@ -73,6 +78,7 @@
       <div class="menu-dropdown">
         <button id="menu-validate" type="button" data-i18n="tools.validate"></button>
         <button id="menu-model-info" type="button" data-i18n="tools.modelInfo"></button>
+        <button id="menu-presets" type="button">テンプレート・ビュー / Presets</button>
         <button id="menu-section-calculator" type="button" data-i18n="tools.sectionCalculator"></button>
         <button id="menu-import-report" type="button" data-i18n="tools.importReport"></button>
         <button id="menu-results" type="button" data-i18n="tools.results"></button>

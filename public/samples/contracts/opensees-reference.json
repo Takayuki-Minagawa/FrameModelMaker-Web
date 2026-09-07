@@ -1,0 +1,144 @@
+{
+  "format": "opensees-recorder-v1",
+  "modelFingerprint": "sha256:2a86133c796a7fde7b6aa757140b578545d214232352636ebb89c6c177282bb5",
+  "units": {
+    "length": "cm",
+    "force": "kN",
+    "time": "s"
+  },
+  "nodes": [
+    {
+      "tag": 1,
+      "nodeNumber": 1,
+      "coordinates": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "tag": 2,
+      "nodeNumber": 2,
+      "coordinates": [
+        100,
+        0,
+        0
+      ]
+    }
+  ],
+  "members": [
+    {
+      "tag": 1,
+      "memberNumber": 1,
+      "nodeI": 1,
+      "nodeJ": 2,
+      "localY": [
+        0,
+        1,
+        0
+      ],
+      "type": "elasticBeamColumn3D"
+    }
+  ],
+  "forceConvention": "local-end-resisting",
+  "title": "Analytical cantilever reference",
+  "frames": [
+    {
+      "time": 1,
+      "nodes": [
+        {
+          "tag": 1,
+          "displacement": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "reaction": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            100
+          ]
+        },
+        {
+          "tag": 2,
+          "displacement": [
+            0,
+            -0.3333333333333333,
+            0,
+            0,
+            0,
+            -0.005
+          ],
+          "reaction": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "members": [
+        {
+          "tag": 1,
+          "localForce": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            100,
+            0,
+            -1,
+            0,
+            0,
+            0,
+            0
+          ],
+          "stations": [
+            {
+              "position": 0,
+              "force": [
+                0,
+                -1,
+                0,
+                0,
+                0,
+                -100
+              ]
+            },
+            {
+              "position": 0.5,
+              "force": [
+                0,
+                -1,
+                0,
+                0,
+                0,
+                -50
+              ]
+            },
+            {
+              "position": 1,
+              "force": [
+                0,
+                -1,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

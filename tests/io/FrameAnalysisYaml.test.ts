@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { FrameDocument } from '../../src/models/FrameDocument';
 import { parseFrameJson, writeFrameJson } from '../../src/io/FrameJson';
 import { exportFrameAnalysisYaml, parseFrameAnalysisYaml } from '../../src/io/FrameAnalysisYaml';
@@ -370,18 +370,15 @@ model:
     ]));
   });
 
-  it.skipIf(!process.env.FRAME_ANALYSIS_YAML_FIXTURE || !existsSync(process.env.FRAME_ANALYSIS_YAML_FIXTURE ?? ''))(
-    'imports an external analysis YAML fixture when provided',
-    () => {
-      const path = process.env.FRAME_ANALYSIS_YAML_FIXTURE!;
-      const doc = new FrameDocument();
-      const result = parseFrameAnalysisYaml(readFileSync(path, 'utf8'), doc);
-
-      expect(doc.nodes).toHaveLength(76);
-      expect(doc.members).toHaveLength(79);
-      expect(result.skippedElementCount).toBe(0);
-      expect(result.diagnostics.map(d => d.code)).toContain('short_link_element');
-      expect(writeFrameJson(doc)).toContain('"title": "Test0202-floor-vibration-trial"');
-    },
-  );
+  it('imports the bundled analysis fixture on every run', () => {
+    const doc = new FrameDocument();
+    const result = parseFrameAnalysisYaml(readFileSync(new URL('../fixtures/analysis-model.yaml', import.meta.url), 'utf8'), doc);
+    expect(doc.nodes).toHaveLength(5);
+    expect(doc.members).toHaveLength(4);
+    expect(result.skippedElementCount).toBe(2);
+    expect(result.diagnostics.map(d => d.code)).toContain('short_link_element');
+    const roundTrip = new FrameDocument();
+    parseFrameJson(writeFrameJson(doc), roundTrip, { mode: 'strict' });
+    expect(JSON.parse(writeFrameJson(roundTrip))).toEqual(JSON.parse(writeFrameJson(doc)));
+  });
 });

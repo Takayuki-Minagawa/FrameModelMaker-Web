@@ -1,9 +1,12 @@
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g;
 
-export const MAX_IMPORT_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_IMPORT_FILE_BYTES = 100 * 1024 * 1024;
 
 export function safeFilename(value: string, fallback: string): string {
-  const sanitized = value.trim().replace(INVALID_FILENAME_CHARS, '_').replace(/[. ]+$/g, '');
+  const sanitized = value
+    .trim()
+    .replace(INVALID_FILENAME_CHARS, '_')
+    .replace(/[. ]+$/g, '');
   return sanitized || fallback;
 }
 
@@ -26,11 +29,14 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export function recordsToCsv(records: ReadonlyArray<Record<string, unknown>>, keys?: readonly string[]): string {
-  const columns = keys ? [...keys] : [...new Set(records.flatMap(record => Object.keys(record)))];
+export function recordsToCsv(
+  records: ReadonlyArray<Record<string, unknown>>,
+  keys?: readonly string[],
+): string {
+  const columns = keys ? [...keys] : [...new Set(records.flatMap((record) => Object.keys(record)))];
   const lines = [columns.map(csvCell).join(',')];
   for (const record of records) {
-    lines.push(columns.map(key => csvCell(record[key])).join(','));
+    lines.push(columns.map((key) => csvCell(record[key])).join(','));
   }
   return `\uFEFF${lines.join('\r\n')}`;
 }
@@ -38,6 +44,8 @@ export function recordsToCsv(records: ReadonlyArray<Record<string, unknown>>, ke
 export function assertImportFileSize(file: File, maxBytes = MAX_IMPORT_FILE_BYTES): void {
   if (file.size > maxBytes) {
     const maxMb = (maxBytes / (1024 * 1024)).toFixed(0);
-    throw new Error(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum: ${maxMb} MB.`);
+    throw new Error(
+      `File is too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Maximum: ${maxMb} MB.`,
+    );
   }
 }

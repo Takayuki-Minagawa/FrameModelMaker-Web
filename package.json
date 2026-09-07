@@ -1,6 +1,6 @@
 {
   "name": "framemodelmaker-web",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Browser-based editor, validator, visualizer, and interchange tool for 3D frame analysis models",
   "main": "index.js",
   "scripts": {
@@ -11,10 +11,16 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "audit": "npm audit --audit-level=high",
-    "typecheck": "tsc --noEmit -p tsconfig.check.json"
+    "typecheck": "tsc --noEmit -p tsconfig.check.json",
+    "test:e2e": "playwright test",
+    "test:e2e:chromium": "playwright test --project=chromium",
+    "verify": "npm run typecheck && npm test && npm run build && npm run audit",
+    "schemas:generate": "node scripts/generate-schemas.cjs",
+    "examples:generate": "node scripts/generate-examples.mjs",
+    "benchmark": "playwright test --config=playwright.benchmark.config.ts"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": "^22.12.0 || ^24.0.0"
   },
   "keywords": [
     "structural-engineering",
@@ -30,9 +36,12 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.10",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.20.0",
     "@types/three": "^0.185.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "ajv": "^8.20.0",
+    "fake-indexeddb": "^6.2.5",
     "jsdom": "^26.1.0",
     "typescript": "^5.9.3",
     "vite": "^8.1.4",

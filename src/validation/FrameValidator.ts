@@ -2,6 +2,7 @@ import { FrameDocument } from '../models/FrameDocument';
 import { Member } from '../models/Member';
 import { SectionShape, SectionType } from '../models/Section';
 import { Spring } from '../models/Spring';
+import { resolveLocalAxes } from '../services/LocalAxes';
 
 export type FrameValidationSeverity = 'error' | 'warning' | 'info';
 export type FrameEntityKind =
@@ -191,6 +192,12 @@ export class FrameValidator {
     const memberKeyMap = new Map<string, Member>();
     document.members.forEach((member, index) => {
       const memberEntity = entity('member', member.number, index);
+      const axisI = nodeByNumber.get(member.iNodeNumber); const axisJ = nodeByNumber.get(member.jNodeNumber);
+      const localAxis = document.analysisMetadata?.localAxes[String(member.number)];
+      if (axisI && axisJ && localAxis) {
+        try { resolveLocalAxes(axisI, axisJ, localAxis); }
+        catch (error) { sink.add('error', 'invalid_local_axes', String(error), memberEntity); }
+      }
       for (const [field, nodeNumber] of [
         ['iNodeNumber', member.iNodeNumber],
         ['jNodeNumber', member.jNodeNumber],
