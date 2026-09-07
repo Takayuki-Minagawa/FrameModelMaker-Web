@@ -163,12 +163,22 @@ function parseFrame(value: unknown, index: number): AnalysisResultFrame {
   });
   const members = optionalArray(raw.members ?? raw.memberResults, `${framePath}.members`).map((item, memberIndex) => {
     const member = requiredObject(item, `${framePath}.members[${memberIndex}]`);
-    return {
+    const parsed: MemberAnalysisResult = {
       memberNumber: integer(member.memberNumber ?? member.member ?? member.tag, `frames[${index}].members[${memberIndex}].memberNumber`),
       iEnd: force(member.iEnd ?? member.i, `frames[${index}].members[${memberIndex}].iEnd`),
       jEnd: force(member.jEnd ?? member.j, `frames[${index}].members[${memberIndex}].jEnd`),
       ...(member.stations != null ? { stations: parseStations(member.stations) } : {}),
     };
+    if (parsed.stations) {
+      for (const [station, end] of [[parsed.stations[0], parsed.iEnd], [parsed.stations[parsed.stations.length - 1], parsed.jEnd]] as const) {
+        for (const key of ['axial', 'shearY', 'shearZ', 'torsion', 'momentY', 'momentZ'] as const) {
+          if (Math.abs(station[key] - end[key]) > 1e-8 * Math.max(1, Math.abs(end[key]))) {
+            throw new Error(`Station endpoint disagrees with member ${parsed.memberNumber} ${key}.`);
+          }
+        }
+      }
+    }
+    return parsed;
   });
   const duplicateNode = nodes.find((node, nodeIndex) => nodes.findIndex(item => item.nodeNumber === node.nodeNumber) !== nodeIndex);
   if (duplicateNode) throw new Error(`Invalid analysis result: ${framePath} duplicates node ${duplicateNode.nodeNumber}.`);

@@ -602,7 +602,9 @@ export class ModelViewer {
   private fitBounds(bounds: Bounds3, padding = 1.35): void { fitCamera({ camera: this.camera, controls: this.controls, projectionMode: this.projectionMode, getAspect: () => this.getAspect() }, bounds, padding); this.invalidate(); }
 
   setLayerVisibility(layers: Partial<ViewerLayers>): void {
+    const membersChanged = layers.members != null && layers.members !== this.layers.members;
     this.layers = { ...this.layers, ...layers };
+    if (membersChanged && this.localAxesVisible) this.drawLocalAxes();
     this.applyLayerVisibility();
     this.invalidate();
   }
@@ -1215,6 +1217,7 @@ export class ModelViewer {
       controls: this.controls,
       isDark: this.isDark,
       resultLabels: this.resultLabels,
+      entityPassesIsolation: this.entityPassesIsolation.bind(this),
       getSymbolSize: this.getSymbolSize.bind(this),
       addScaledArrow: this.addScaledArrow.bind(this),
       drawMomentGlyph: this.drawMomentGlyph.bind(this)

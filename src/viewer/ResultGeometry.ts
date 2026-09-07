@@ -16,6 +16,7 @@ interface ResultGeometryContext {
   controls: { target: THREE.Vector3 };
   isDark: boolean;
   resultLabels: { position: THREE.Vector3; text: string; color: string; priority: number }[];
+  entityPassesIsolation(kind: 'node' | 'member', number: number): boolean;
   getSymbolSize(): number;
   addScaledArrow(
     origin: THREE.Vector3,
@@ -53,12 +54,12 @@ export function drawResultGeometry(ctx: ResultGeometryContext): void {
     const positions: number[] = [];
     const nodePositions: number[] = [];
     for (const node of ctx.doc.nodes) {
-      if (!node.isShown) continue;
+      if (!node.isShown || !ctx.entityPassesIsolation('node', node.number)) continue;
       const position = deformedPosition(node.number);
       if (position) nodePositions.push(...position.toArray());
     }
     for (const member of ctx.doc.members) {
-      if (!member.isShown) continue;
+      if (!member.isShown || !ctx.entityPassesIsolation('member', member.number)) continue;
       const i = deformedPosition(member.iNodeNumber);
       const j = deformedPosition(member.jNodeNumber);
       if (!i || !j) continue;
@@ -87,7 +88,7 @@ export function drawResultGeometry(ctx: ResultGeometryContext): void {
     const symbolSize = ctx.getSymbolSize();
     for (const result of frame.nodes) {
       const node = ctx.nodeIndex.get(result.nodeNumber);
-      if (!node) continue;
+      if (!node || !node.isShown || !ctx.entityPassesIsolation('node', node.number)) continue;
       const origin = new THREE.Vector3(node.x, node.y, node.z);
       if (result.reaction) {
         const reaction = new THREE.Vector3(...result.reaction);
@@ -121,6 +122,7 @@ export function drawResultGeometry(ctx: ResultGeometryContext): void {
   if (forceComponent) {
     for (const result of frame.members ?? []) {
       const member = ctx.memberIndex.get(result.memberNumber);
+      if (!member || !member.isShown || !ctx.entityPassesIsolation('member', member.number)) continue;
       const iNode = member ? ctx.nodeIndex.get(member.iNodeNumber) : undefined;
       const jNode = member ? ctx.nodeIndex.get(member.jNodeNumber) : undefined;
       if (!iNode || !jNode || !result.stations || result.stations.length === 0) continue;

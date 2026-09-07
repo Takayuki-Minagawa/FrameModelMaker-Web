@@ -43,3 +43,8 @@ it('converts the recorded output of the independently executed OpenSees cantilev
   expect(result.frames[0].nodes[0].reaction!.momentZ).toBeCloseTo(100,10);
   expect(result.frames[0].members[0].iEnd.momentZ).toBeCloseTo(-100,10);
 });
+
+it('rejects stations inconsistent with the separately declared end actions', async () => {
+  const {doc,raw}=await beam();raw.frames[0].members[0].stations[0].force[5]=123;
+  await expect(convertOpenSeesResults(JSON.stringify(raw),doc)).rejects.toThrow(/endpoint/);
+});

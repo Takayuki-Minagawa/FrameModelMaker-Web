@@ -1,3 +1,4 @@
+import { prepareCsvEdit } from '../services/BulkEdit';
 import type { PatternSelection } from '../services/ModelPatterns';
 import { settings } from '../services/SettingsRepository';
 import { importCsv, previewPaste } from './BulkEditPanel';
@@ -545,7 +546,13 @@ function setupGridToolbar(): void {
     const revision = doc.revision;
     const rows = grid.getSelectedRowIndices();
     if (!rows.length) return;
-    const columns = grid.getColumns().filter((column) => !column.readOnly);
+    const tab = activeTab;
+    const identity = ['nodeloads', 'boundaries'].includes(tab)
+      ? 'nodeNumber'
+      : ['memberloads', 'cmqloads'].includes(tab)
+        ? 'memberNumber'
+        : 'number';
+    const columns = grid.getColumns().filter((column) => !column.readOnly && column.key !== identity);
     const fields = await requestFields(dialogService, localText('選択行を一括変更', 'Edit selected rows'), [
       {
         name: 'column',
@@ -556,18 +563,24 @@ function setupGridToolbar(): void {
       { name: 'value', label: localText('値（空欄は変更しない）', 'Value (blank leaves unchanged)') },
     ]);
     if (!fields || grid !== currentGrid || revision !== doc.revision || fields.value === '') return;
-    const column = grid.getColumns().findIndex((item) => item.key === fields.column);
-    const plans = rows.map((rowIndex) =>
-      grid.pasteTSV(fields.value, { rowIndex, columnIndex: column }, { preview: true, atomic: true }),
-    );
-    const errors = plans.flatMap((plan) => plan.errors);
-    if (errors.length) throw new Error(errors.map((error) => error.message).join(' / '));
-    const changes = plans.flatMap((plan) => plan.changes);
-    if (!changes.length) return;
-    mutateDocument('Bulk attributes', () => {
-      for (const cell of changes) Reflect.set(cell.row, cell.columnKey, cell.value);
-      activeProvider().applyChanges?.({ source: 'paste', ...changes[0], changes });
+    const quoted = '"' + fields.value.replace(/"/g, '""') + '"';
+    const csv = [
+      identity + ',' + fields.column,
+      ...rows.map((index) => String(grid.getData()[index][identity]) + ',' + quoted),
+    ].join('\n');
+    const preview = prepareCsvEdit(doc, tab, csv, [identity, fields.column], 'update', 'cm-kN');
+    const report = createElement('div');
+    report.append(createElement('p', undefined, `${preview.changes.length} ${localText('変更', 'changes')}`));
+    for (const error of preview.errors) report.append(createElement('p', 'diagnostic-item error', error));
+    for (const change of preview.changes.slice(0, 100)) report.append(createElement('p', undefined, change));
+    const apply = await dialogService.confirm({
+      title: localText('一括変更プレビュー', 'Bulk edit preview'),
+      body: report,
+      confirmLabel: preview.errors.length ? localText('閉じる', 'Close') : localText('適用', 'Apply'),
     });
+    if (apply && !preview.errors.length && grid === currentGrid && revision === doc.revision) {
+      mutateDocument('Bulk attributes', () => doc.replaceWith(preview.document));
+    }
   });
   const group = createElement('div');
   group.id = 'toolbar-buttons';

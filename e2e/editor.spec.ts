@@ -177,33 +177,127 @@ test('virtual rows preserve sorted identity when scrolling to an offscreen row',
   expect(result.dom).toBeLessThan(100);
 });
 
-test('two tabs retain independent recovery candidates', async ({page})=>{
-  await page.goto('./');await page.locator('#btn-add-row').click();await expect(page.locator('#recovery-status')).toHaveAttribute('data-state','saved');
-  const other=await page.context().newPage();await other.goto('./');await other.locator('#btn-add-row').click();await other.locator('#btn-add-row').click();await expect(other.locator('#recovery-status')).toHaveAttribute('data-state','saved');
-  await page.locator('#recovery-status').click();await expect(page.locator('#tool-panel-body').getByRole('button',{name:'復元',exact:true})).toHaveCount(2);await other.close();
+test('two tabs retain independent recovery candidates', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#btn-add-row').click();
+  await expect(page.locator('#recovery-status')).toHaveAttribute('data-state', 'saved');
+  const other = await page.context().newPage();
+  await other.goto('./');
+  await other.locator('#btn-add-row').click();
+  await other.locator('#btn-add-row').click();
+  await expect(other.locator('#recovery-status')).toHaveAttribute('data-state', 'saved');
+  await page.locator('#recovery-status').click();
+  await expect(
+    page.locator('#tool-panel-body').getByRole('button', { name: '復元', exact: true }),
+  ).toHaveCount(2);
+  await other.close();
 });
 
-test('viewer keeps camera and resource counts across updates and releases its canvas',async({page})=>{
-  await page.goto('./');const result=await page.evaluate(async()=>{
-    const base='/FrameModelMaker-Web/';
-    const {FrameDocument}=await import(/* @vite-ignore */ base+'src/models/FrameDocument.ts');
-    const {parseFrameJson}=await import(/* @vite-ignore */ base+'src/io/FrameJson.ts');
-    const {ModelViewer}=await import(/* @vite-ignore */ base+'src/viewer/ModelViewer.ts');
-    const {adaptAnalysisResult}=await import(/* @vite-ignore */ base+'src/viewer/ResultsAdapter.ts');
-    const doc=new FrameDocument();parseFrameJson(await (await fetch(base+'samples/contracts/frame-v2.json')).text(),doc);
-    const mount=document.createElement('div');mount.style.cssText='width:600px;height:400px';document.body.append(mount);
-    const viewer=new ModelViewer(mount,doc);viewer.updateModel();viewer.setStandardView('front');const camera=viewer.getCameraState();
-    const waitFrame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-    await waitFrame();const before=viewer.getPerformanceInfo();for(let i=0;i<5;i++)viewer.updateModel(false);await waitFrame();const after=viewer.getPerformanceInfo();const actualCamera=viewer.getCameraState();const same=camera.projection===actualCamera.projection && Math.abs(camera.zoom-actualCamera.zoom)<1e-9 && ['position','target','up'].every(key=>camera[key].every((value:number,index:number)=>Math.abs(value-actualCamera[key][index])<1e-7));
-    viewer.setLocalAxesVisible(true);await waitFrame();const axes=viewer.getLocalAxesVisible();viewer.setLocalAxesVisible(false);
-    const raw=await (await fetch(base+'samples/contracts/results-v1.json')).json();raw.frames.push({...raw.frames[0],time:2});viewer.setAnalysisResults(adaptAnalysisResult(raw));viewer.setLayerVisibility({results:true});viewer.setResultDisplay({showDeformation:true,showReactions:true,sectionForce:'momentZ'});
-    const play=viewer.playResults({fps:60,loop:false});await new Promise(resolve=>setTimeout(resolve,80));const frame=viewer.getResultFrameIndex();viewer.dispose();const canvases=mount.querySelectorAll('canvas').length;mount.remove();return {same,before,after,axes,play,frame,canvases};
-  });expect(result.same).toBe(true);expect(result.after.geometries).toBe(result.before.geometries);expect(result).toMatchObject({axes:true,play:true,frame:1,canvases:0});
+test('viewer keeps camera and resource counts across updates and releases its canvas', async ({ page }) => {
+  await page.goto('./');
+  const result = await page.evaluate(async () => {
+    const base = '/FrameModelMaker-Web/';
+    const { FrameDocument } = await import(/* @vite-ignore */ base + 'src/models/FrameDocument.ts');
+    const { parseFrameJson } = await import(/* @vite-ignore */ base + 'src/io/FrameJson.ts');
+    const { ModelViewer } = await import(/* @vite-ignore */ base + 'src/viewer/ModelViewer.ts');
+    const { adaptAnalysisResult } = await import(/* @vite-ignore */ base + 'src/viewer/ResultsAdapter.ts');
+    const doc = new FrameDocument();
+    parseFrameJson(await (await fetch(base + 'samples/contracts/frame-v2.json')).text(), doc);
+    const mount = document.createElement('div');
+    mount.style.cssText = 'width:600px;height:400px';
+    document.body.append(mount);
+    const viewer = new ModelViewer(mount, doc);
+    viewer.updateModel();
+    viewer.setStandardView('front');
+    const camera = viewer.getCameraState();
+    const waitFrame = () =>
+      new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await waitFrame();
+    const before = viewer.getPerformanceInfo();
+    for (let i = 0; i < 5; i++) viewer.updateModel(false);
+    await waitFrame();
+    const after = viewer.getPerformanceInfo();
+    const actualCamera = viewer.getCameraState();
+    const same =
+      camera.projection === actualCamera.projection &&
+      Math.abs(camera.zoom - actualCamera.zoom) < 1e-9 &&
+      ['position', 'target', 'up'].every((key) =>
+        camera[key].every(
+          (value: number, index: number) => Math.abs(value - actualCamera[key][index]) < 1e-7,
+        ),
+      );
+    viewer.setLayerVisibility({ members: false });
+    viewer.setLocalAxesVisible(true);
+    viewer.setLayerVisibility({ members: true });
+    await waitFrame();
+    const axes = viewer.getLocalAxesVisible() && viewer.localAxesLayer?.children.length === 3;
+    viewer.setLocalAxesVisible(false);
+    const raw = await (await fetch(base + 'samples/contracts/results-v1.json')).json();
+    raw.frames.push({ ...raw.frames[0], time: 2 });
+    viewer.setAnalysisResults(adaptAnalysisResult(raw));
+    viewer.setLayerVisibility({ results: true });
+    viewer.setResultDisplay({ showDeformation: true, showReactions: true, sectionForce: 'momentZ' });
+    const play = viewer.playResults({ fps: 60, loop: false });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const frame = viewer.getResultFrameIndex();
+    viewer.dispose();
+    const canvases = mount.querySelectorAll('canvas').length;
+    mount.remove();
+    return { same, before, after, axes, play, frame, canvases };
+  });
+  expect(result.same).toBe(true);
+  expect(result.after.geometries).toBe(result.before.geometries);
+  expect(result).toMatchObject({ axes: true, play: true, frame: 1, canvases: 0 });
 });
 
-test('large model uses a worker and commits only after preview',async({page})=>{
-  const {readFileSync}=await import('node:fs');const model=JSON.parse(readFileSync('public/samples/contracts/frame-v2.json','utf8'));
-  const node=model.nodes[0],member=model.members[0];model.nodes=Array.from({length:6000},(_,i)=>({...node,number:i+1,x:i*100}));model.members=Array.from({length:5999},(_,i)=>({...member,number:i+1,iNodeNumber:i+1,jNodeNumber:i+2}));
-  await page.goto('./');const worker=page.waitForEvent('worker');const chooser=page.waitForEvent('filechooser');await menu(page,'menu-open');await(await chooser).setFiles({name:'large.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(model,null,2))});
-  expect((await worker).url()).toContain('ImportWorker');await expect(page.locator('#app-dialog-body')).toContainText('6000');await expect(page.locator('#grid-container tr[data-row-index]')).toHaveCount(0);await page.locator('#app-dialog-confirm').click();await expect(page.locator('#model-summary')).toContainText('6000');
+test('large model uses a worker and commits only after preview', async ({ page }) => {
+  const { readFileSync } = await import('node:fs');
+  const model = JSON.parse(readFileSync('public/samples/contracts/frame-v2.json', 'utf8'));
+  const node = model.nodes[0],
+    member = model.members[0];
+  model.nodes = Array.from({ length: 6000 }, (_, i) => ({ ...node, number: i + 1, x: i * 100 }));
+  model.members = Array.from({ length: 5999 }, (_, i) => ({
+    ...member,
+    number: i + 1,
+    iNodeNumber: i + 1,
+    jNodeNumber: i + 2,
+  }));
+  await page.goto('./');
+  const worker = page.waitForEvent('worker');
+  const chooser = page.waitForEvent('filechooser');
+  await menu(page, 'menu-open');
+  await (
+    await chooser
+  ).setFiles({
+    name: 'large.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(model, null, 2)),
+  });
+  expect((await worker).url()).toContain('ImportWorker');
+  await expect(page.locator('#app-dialog-body')).toContainText('6000');
+  await expect(page.locator('#grid-container tr[data-row-index]')).toHaveCount(0);
+  await page.locator('#app-dialog-confirm').click();
+  await expect(page.locator('#model-summary')).toContainText('6000');
+});
+
+test('bulk attributes validate and preview before one undoable commit', async ({ page }) => {
+  await page.goto('./');
+  await sample(page);
+  const first = page.locator('input[data-row-index="0"][data-column-key="temperature"]');
+  const second = page.locator('input[data-row-index="1"][data-column-key="temperature"]');
+  const before = [await first.inputValue(), await second.inputValue()];
+  await first.click();
+  await second.click({ modifiers: ['ControlOrMeta'] });
+  await menu(page, 'menu-bulk-attribute');
+  await page.locator('#app-dialog-body select').selectOption('temperature');
+  await page.locator('#app-dialog-body input').fill('12');
+  await page.locator('#app-dialog-confirm').click();
+  await expect(page.locator('#app-dialog-title')).toContainText('プレビュー');
+  await expect(first).toHaveValue(before[0]);
+  await page.locator('#app-dialog-confirm').click();
+  await expect(first).toHaveValue('12');
+  await expect(second).toHaveValue('12');
+  await menu(page, 'menu-undo');
+  await expect(first).toHaveValue(before[0]);
+  await expect(second).toHaveValue(before[1]);
 });
