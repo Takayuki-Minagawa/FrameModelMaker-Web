@@ -22,6 +22,7 @@ import type {
   AnalysisResultFrame,
   AnalysisResultSet,
   ColorLegendEntry,
+  DrawingCursorInfo,
   DrawingEvent,
   DrawingMode,
   DrawingOptions,
@@ -49,6 +50,7 @@ export type {
   AnalysisResultFrame,
   AnalysisResultSet,
   ColorLegendEntry,
+  DrawingCursorInfo,
   DrawingEvent,
   DrawingMode,
   DrawingOptions,
@@ -83,6 +85,7 @@ const NODE_PICK_RADIUS_PX = 10;
 const MEMBER_PICK_RADIUS_PX = 8;
 const WALL_PICK_RADIUS_PX = 5;
 const LABEL_FONT = '11px sans-serif';
+const LABEL_HEIGHT_PX = 12;
 
 const COLORS = {
   node: new THREE.Color(0x004ccc),
@@ -107,6 +110,7 @@ const THEME = {
     labelNode: '#0044aa',
     labelMember: '#aa4400',
     labelWall: '#36627a',
+    labelBackground: 'rgba(255, 255, 255, 0.78)',
   },
   dark: {
     background: 0x252535,
@@ -115,6 +119,7 @@ const THEME = {
     labelNode: '#66aaff',
     labelMember: '#ffaa66',
     labelWall: '#9fd5ee',
+    labelBackground: 'rgba(16, 28, 40, 0.78)',
   },
 } as const;
 
@@ -246,6 +251,7 @@ export class ModelViewer {
   private drawingMode: DrawingMode = 'none';
   private drawingStart: DrawingStart | null = null;
   private drawingEventHandler: ((event: DrawingEvent) => void) | null = null;
+  private drawingCursorHandler: ((info: DrawingCursorInfo | null) => void) | null = null;
   private pointerDownPos: { x: number; y: number } | null = null;
   private keyboardCursor = { x: 0.5, y: 0.5 };
 
@@ -744,6 +750,41 @@ export class ModelViewer {
 
   getDrawingMode(): DrawingMode {
     return this.drawingMode;
+  }
+
+  getDrawingOptions(): DrawingOptions {
+    return { ...this.drawingOptions };
+  }
+
+  setDrawingOptions(options: Partial<DrawingOptions>): void {
+    this.drawingOptions = { ...this.drawingOptions, ...options };
+  }
+
+  /** Reports the snapped pointer/keyboard position while drawing (R10). */
+  setOnDrawingCursor(handler: ((info: DrawingCursorInfo | null) => void) | null): void {
+    this.drawingCursorHandler = handler;
+  }
+
+  /** The pending start point of a member being drawn, if any. */
+  getDrawingStart(): DrawingCursorInfo | null {
+    return this.drawingStart ? { position: [...this.drawingStart.position] as Vector3Tuple, nodeNumber: this.drawingStart.nodeNumber } : null;
+  }
+
+  /**
+   * Confirms a drawing action at an explicit world coordinate, equivalent to a
+   * click at that point. Existing nodes at the exact position are reused.
+   */
+  confirmDrawingPoint(position: Vector3Tuple): boolean {
+    if (this.drawingMode === 'none' || !position.every(Number.isFinite)) return false;
+    let nodeNumber: number | undefined;
+    for (const node of this.doc.nodes) {
+      if (Math.abs(node.x - position[0]) < 1e-6 && Math.abs(node.y - position[1]) < 1e-6 && Math.abs(node.z - position[2]) < 1e-6) {
+        nodeNumber = node.number;
+        break;
+      }
+    }
+    this.commitDrawingPoint({ position: [...position] as Vector3Tuple, nodeNumber });
+    return true;
   }
 
   setOnDrawingEvent(handler: ((event: DrawingEvent) => void) | null): void {
@@ -1289,7 +1330,7 @@ export class ModelViewer {
       case 'section': return `Section ${context.sectionNumber}`;
       case 'material': {
         const name = this.doc.findMaterialByNumber(context.materialNumber)?.name;
-        return name || `Material ${context.materialNumber}`;
+        return `Material ${context.materialNumber}${name ? `: ${name}` : ''}`;
       }
       case 'element-type': return `Element type ${context.elementType ?? 'unknown'}`;
       default: return 'Member';
@@ -1401,12 +1442,14 @@ export class ModelViewer {
     this.labelCtx.textAlign = 'center';
     this.labelCtx.textBaseline = 'bottom';
     for (const candidate of accepted) {
+      const baseline = candidate.y - candidate.value.baselineOffset;
+      // A translucent backing keeps numbers legible over support glyphs, load
+      // arrows and dense members (R17).
+      const width = this.labelCtx.measureText(candidate.value.text).width;
+      this.labelCtx.fillStyle = theme.labelBackground;
+      this.labelCtx.fillRect(candidate.x - width / 2 - 2, baseline - LABEL_HEIGHT_PX, width + 4, LABEL_HEIGHT_PX + 1);
       this.labelCtx.fillStyle = candidate.value.color;
-      this.labelCtx.fillText(
-        candidate.value.text,
-        candidate.x,
-        candidate.y - candidate.value.baselineOffset,
-      );
+      this.labelCtx.fillText(candidate.value.text, candidate.x, baseline);
     }
 
     const hudLines: string[] = [];
@@ -1459,9 +1502,10 @@ export class ModelViewer {
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
-    if (!this.drawingStart || this.drawingMode !== 'member') return;
+    if (this.drawingMode === 'none') return;
     const point = this.screenToDrawingPoint(event.clientX, event.clientY);
-    if (!point) return;
+    this.reportDrawingCursor(point);
+    if (!this.drawingStart || this.drawingMode !== 'member' || !point) return;
     this.clearGroup(this.drawingGroup);
     const geometry = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(...this.drawingStart.position),
@@ -1491,6 +1535,13 @@ export class ModelViewer {
       else this.keyboardCursor.y += stepY;
       this.keyboardCursor.x = THREE.MathUtils.clamp(this.keyboardCursor.x, 0, 1);
       this.keyboardCursor.y = THREE.MathUtils.clamp(this.keyboardCursor.y, 0, 1);
+      if (this.drawingMode !== 'none') {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.reportDrawingCursor(this.screenToDrawingPoint(
+          rect.left + rect.width * this.keyboardCursor.x,
+          rect.top + rect.height * this.keyboardCursor.y,
+        ));
+      }
       this.invalidate();
       return;
     }
@@ -1539,6 +1590,10 @@ export class ModelViewer {
   private handleDrawingClick(clientX: number, clientY: number): void {
     const point = this.screenToDrawingPoint(clientX, clientY);
     if (!point) return;
+    this.commitDrawingPoint(point);
+  }
+
+  private commitDrawingPoint(point: DrawingStart): void {
     if (this.drawingMode === 'node') {
       this.drawingEventHandler?.({
         type: 'node-create',
@@ -1579,6 +1634,12 @@ export class ModelViewer {
       }
     }
     this.invalidate();
+  }
+
+  private reportDrawingCursor(point: DrawingStart | null): void {
+    this.drawingCursorHandler?.(
+      point ? { position: [...point.position] as Vector3Tuple, nodeNumber: point.nodeNumber } : null,
+    );
   }
 
   private screenToDrawingPoint(clientX: number, clientY: number): DrawingStart | null {

@@ -967,3 +967,116 @@ select:focus-visible,
    technology and via the cell's title without changing the scroll geometry. */
 .data-grid-virtual tbody tr[data-row-index] { height: 34px; }
 .data-grid-virtual .data-grid-cell-error { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* --- CUA 2026-10-15 additions --- */
+
+/* R07: status kinds are machine-readable (data-kind) and visually distinct. */
+#status-text[data-kind="success"]::before { content: "✓ "; color: var(--success); }
+#status-text[data-kind="error"]::before { content: "✕ "; color: var(--danger); }
+#status-text[data-kind="cancel"]::before { content: "⊘ "; color: var(--warning); }
+#status-text[data-kind="error"] { color: #ffd0d0; }
+
+/* R09: menu labels never wrap. The bar must not become a scroll container,
+   otherwise the absolutely positioned dropdowns are clipped. */
+.menu-item summary { white-space: nowrap; }
+#menu-right { white-space: nowrap; }
+
+/* R09: tab navigation with scroll buttons and a tab list. */
+#tab-nav {
+  display: flex;
+  align-items: stretch;
+  min-height: 31px;
+  border-bottom: 1px solid var(--border-tab);
+  background: var(--bg-tab);
+}
+#tab-nav #tab-bar { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-bottom: 0; }
+#tab-nav #tab-bar::-webkit-scrollbar { display: none; }
+.tab-scroll {
+  flex: 0 0 auto;
+  min-width: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-input);
+  cursor: pointer;
+}
+.tab-scroll[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-hover); }
+.tab-select-box { display: flex; align-items: center; padding: 0 4px; }
+.tab-select-box select { max-width: 120px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-panel); color: var(--text-input); font-size: 11px; }
+#grid-filter-state { padding: 2px 8px; border-bottom: 1px solid var(--border-light); color: var(--text-toolbar); font-size: 11px; min-height: 18px; }
+#grid-filter-state:empty { display: none; }
+
+/* R09: maximize either half of the layout. */
+#main-content.data-maximized #viewer-panel,
+#main-content.data-maximized #resize-handle { display: none; }
+#main-content.data-maximized #data-panel { flex: 1 1 auto; max-width: none; width: 100%; }
+#main-content.view-maximized #data-panel,
+#main-content.view-maximized #resize-handle { display: none; }
+
+/* R05/R11/R12: field descriptions and dialog previews. */
+.field-description { display: block; color: var(--text-toolbar); font-size: 11px; font-weight: 400; line-height: 1.3; }
+.dialog-preview { grid-column: 1 / -1; margin: 0; padding: 8px; border: 1px dashed var(--border); border-radius: 5px; font-size: 12px; }
+.dialog-preview:empty { display: none; }
+.pattern-preview-positions { margin: 4px 0 0; padding-left: 18px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
+
+/* R01/R03/R13/R14: panel sub-sections, badges and result states. */
+.panel-subtitle { grid-column: 1 / -1; margin: 6px 0 2px; font-weight: 600; }
+.panel-badge { margin-left: 8px; padding: 1px 6px; border-radius: 999px; background: var(--warning-soft); color: var(--warning); font-size: 11px; font-weight: 500; }
+.panel-inline-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.panel-form > .panel-inline-actions,
+.panel-form > table,
+.panel-form > div,
+.panel-form > h3 { grid-column: 1 / -1; }
+.panel-form .panel-inline-actions input { min-width: 0; flex: 1 1 60px; }
+.section-result[data-state="stale"] table { opacity: 0.55; }
+.section-result[data-state="stale"] .panel-subtitle { color: var(--warning); }
+.section-result[data-state="error"] .panel-subtitle { color: var(--danger); }
+.stale-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+#yaml-export-summary tr.omitted td { color: var(--warning); }
+#yaml-export-summary th, .panel-table th { text-align: left; font-weight: 600; padding: 4px 5px; border-bottom: 1px solid var(--border); }
+.panel-table th { position: static; background: transparent; color: inherit; }
+
+/* R10: drawing settings panel. */
+#drawing-panel {
+  position: absolute;
+  top: 48px;
+  left: 10px;
+  z-index: 650;
+  width: min(360px, calc(100% - 20px));
+  max-height: calc(100% - 120px);
+  overflow: auto;
+  border: 1px solid var(--border-selection);
+  border-radius: 9px;
+  background: var(--bg-selection);
+  color: var(--text-selection);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.23);
+}
+#drawing-panel-body { padding: 9px 11px; }
+#drawing-panel-close { width: 28px; height: 28px; border: 0; background: transparent; color: inherit; font-size: 19px; cursor: pointer; }
+
+/* R17: tool panel collapse / dock / resize. */
+.panel-header-actions { display: flex; align-items: center; gap: 2px; }
+#tool-panel-collapse, #tool-panel-dock { font-size: 14px; }
+#tool-panel:not(.docked) { resize: both; min-width: 260px; min-height: 48px; }
+#tool-panel.collapsed { max-height: none; }
+#viewer-panel.tool-panel-docked { display: flex; }
+#viewer-panel.tool-panel-docked > canvas { flex: 1 1 auto; }
+#tool-panel.docked {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  order: -1;
+  flex: 0 0 min(420px, 45%);
+  width: auto;
+  max-height: none;
+  height: 100%;
+  border-radius: 0;
+  border-width: 0 1px 0 0;
+  box-shadow: none;
+  resize: horizontal;
+  overflow: auto;
+}
+#tool-panel.docked #tool-panel-body { max-height: none; }
+#selection-info-header { gap: 6px; }
+#selection-info-clear { padding: 2px 8px; font-size: 11px; }

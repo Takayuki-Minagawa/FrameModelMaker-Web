@@ -3,8 +3,10 @@ import type { PatternSelection } from '../services/ModelPatterns';
 import { settings } from '../services/SettingsRepository';
 import { importCsv, previewPaste } from './BulkEditPanel';
 import { EditorController } from './EditorController';
+import { createDrawingPanel } from './DrawingPanel';
 import { createFileOperations } from './FileOperations';
 import { createGridColumns } from './GridColumns';
+import { createLoadCasePanel, describeLoadCase } from './LoadCasePanel';
 import { createModelInfoPanel } from './ModelInfoPanel';
 import { showFrameTemplateDialog, showPatternDialog } from './PatternPanel';
 import { PresetPanel } from './PresetPanel';
@@ -17,7 +19,6 @@ import {
   byId,
   createButton,
   createElement,
-  labelled,
   localText,
   nextNumber,
   requestFields,
@@ -64,6 +65,45 @@ let currentSelection: ViewerSelection = { kind: 'none' };
 let helpPreviousFocus: HTMLElement | null = null;
 let selectionSyncInProgress = false;
 let results: ReturnType<typeof createResultsPanel>;
+let loadCasePanel: ReturnType<typeof createLoadCasePanel>;
+let drawingPanel: ReturnType<typeof createDrawingPanel>;
+let statusSequence = 0;
+
+export type NotifyKind = 'info' | 'success' | 'error' | 'cancel';
+
+/**
+ * Status notifications carry their kind and a sequence number so a stale error
+ * can never be mistaken for the outcome of a later operation (R07).
+ */
+function notify(kind: NotifyKind, message: string): void {
+  const element = document.getElementById('status-text');
+  if (!element) return;
+  statusSequence++;
+  element.textContent = message;
+  element.dataset.kind = kind;
+  element.dataset.sequence = String(statusSequence);
+  element.title = new Date().toLocaleTimeString();
+}
+
+/** Returns the live application state for integration tests. */
+export function getApplicationForTesting() {
+  return {
+    doc,
+    history,
+    viewer,
+    toolPanel,
+    dialogService,
+    loadCasePanel,
+    results,
+    drawingPanel,
+    getSelection: () => currentSelection,
+    getGrid: () => currentGrid,
+    getActiveTab: () => activeTab,
+    setCurrentSelection,
+    notify,
+    showTab,
+  };
+}
 
 const tabDefs = [
   { id: 'nodes', i18nKey: 'tab.nodes' },
@@ -82,7 +122,7 @@ function reportError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   console.error(error);
   if (currentGrid && viewer) refreshDocumentUi(false);
-  updateStatus(localText(`エラー: ${message}`, `Error: ${message}`));
+  notify('error', localText(`エラー: ${message}`, `Error: ${message}`));
 }
 
 function on(id: string, handler: () => void | Promise<void>): void {
@@ -96,7 +136,7 @@ function on(id: string, handler: () => void | Promise<void>): void {
 export function initialize(): void {
   setUiErrorHandler(reportError);
   dialogService = new DialogService();
-  toolPanel = new ToolPanel();
+  toolPanel = new ToolPanel(() => viewer?.resize());
   files = createFileOperations({
     doc,
     history,
@@ -113,9 +153,10 @@ export function initialize(): void {
     grid: () => currentGrid,
     tab: () => activeTab,
     recovery: () => recovery,
+    resetGridFilters,
   });
   setupViewer();
-  presets = new PresetPanel(doc, viewer, dialogService, toolPanel, mutateDocument);
+  presets = new PresetPanel(doc, viewer, dialogService, toolPanel, mutateDocument, notify);
   results = createResultsPanel({
     doc,
     viewer,
@@ -123,6 +164,7 @@ export function initialize(): void {
     updateViewerToggleStates,
     updateStatus,
     reportError,
+    getSelection: () => currentSelection,
   });
   modelInfo = createModelInfoPanel({ doc, viewer, toolPanel, updateViewerToggleStates, updateStatus });
   sectionCalculator = createSectionCalculator({
@@ -131,7 +173,26 @@ export function initialize(): void {
     presets,
     ensureDefaultSection,
     mutateDocument,
+    notify,
   });
+  loadCasePanel = createLoadCasePanel({
+    doc,
+    dialogService,
+    toolPanel,
+    mutateDocument,
+    setActiveLoadCaseIndex,
+    notify,
+  });
+  drawingPanel = createDrawingPanel({
+    doc,
+    viewer,
+    notify,
+    onExit: () => {
+      byId('drawing-hint').classList.add('hidden');
+      updateViewerToggleStates();
+    },
+  });
+  viewer.setOnDrawingCursor((info) => drawingPanel.syncCursor(info));
   on('menu-presets', () => presets.show());
   on('menu-pattern', () => {
     const selection: PatternSelection = { nodes: [], members: [], walls: [] };
@@ -145,23 +206,27 @@ export function initialize(): void {
       if (currentSelection.kind === 'member') selection.members.push(currentSelection.memberNumber);
       if (currentSelection.kind === 'wall') selection.walls.push(currentSelection.wallNumber);
     }
-    return showPatternDialog(doc, selection, dialogService, mutateDocument);
+    return showPatternDialog(doc, selection, dialogService, mutateDocument, notify);
   });
-  on('menu-frame-template', () => showFrameTemplateDialog(doc, dialogService, mutateDocument));
+  on('menu-frame-template', () => showFrameTemplateDialog(doc, dialogService, mutateDocument, notify));
   setupMenu();
   setupTabs();
   setupGridToolbar();
   setupViewerToolbar();
   on('menu-local-axes', () => {
     viewer.setLocalAxesVisible(!viewer.getLocalAxesVisible());
+    updateViewerToggleStates();
     updateStatus(
-      localText(
-        '局所軸: x=赤、y=緑、z=青（未指定軸は推定）',
-        'Local axes: x=red, y=green, z=blue; unspecified axes are inferred.',
-      ),
+      viewer.getLocalAxesVisible()
+        ? localText(
+            '局所軸: 表示（x=赤、y=緑、z=青。未指定軸は推定）',
+            'Local axes: on (x=red, y=green, z=blue; unspecified axes are inferred).',
+          )
+        : localText('局所軸: 非表示', 'Local axes: off'),
     );
   });
   setupSelectionPanel();
+  setupLayoutControls();
   setupResizer();
   setupTheme();
   setupLanguage();
@@ -171,17 +236,29 @@ export function initialize(): void {
     history,
     toolPanel,
     () => doc.title,
-    async (payload) => {
-      if (!(await confirmDiscardChanges())) return false;
+    async (payload, record) => {
+      if (!(await confirmDiscardChanges())) {
+        notify('cancel', localText('復元を取り消しました。', 'Restore cancelled.'));
+        return false;
+      }
       history.restoreAutosave(payload);
       invalidateAnalysisResults();
       resetViewerSelection();
+      resetGridFilters();
       refreshDocumentUi(true);
+      notify(
+        'success',
+        localText(
+          `復旧候補「${record.title || 'Untitled'} ${new Date(record.updatedAt).toLocaleString()}」から復元しました（節点 ${doc.nodes.length} / 部材 ${doc.members.length}）`,
+          `Restored from recovery snapshot “${record.title || 'Untitled'} ${new Date(record.updatedAt).toLocaleString()}” (nodes ${doc.nodes.length} / members ${doc.members.length})`,
+        ),
+      );
       return true;
     },
     reportError,
     saveJson,
   );
+  recovery.reportStatus = (message) => notify('success', message);
   applyI18n();
   void recovery.initialize();
   updateLoadCaseSelector();
@@ -219,12 +296,18 @@ function applyI18n(): void {
   byId<HTMLButtonElement>('btn-theme').textContent = dark ? t('theme.light') : t('theme.dark');
   byId<HTMLButtonElement>('btn-lang').textContent = getLang() === 'ja' ? 'EN' : 'JA';
   byId('help-title').textContent = t('help.title');
-  byId<HTMLButtonElement>('selection-info-close').title = t('selection.close');
+  byId<HTMLButtonElement>('selection-info-close').title = t('selection.closeInfo');
+  document.querySelectorAll<HTMLOptionElement>('#tab-select option').forEach((option) => {
+    const definition = tabDefs.find((tab) => tab.id === option.value);
+    if (definition) option.textContent = t(definition.i18nKey);
+  });
+  recovery?.renderStatus();
   updateLoadCaseSelector();
   updateToolbarVisibility();
   if (currentGrid) refreshGrid();
   renderSelectionInfo(currentSelection);
   updateModelSummary();
+  updateFilterState();
   viewer.setAccessibleLabel(
     localText(
       '対話型構造モデルビュー。矢印キーでカーソルを動かし、Enterで選択または作図します。',
@@ -349,10 +432,14 @@ function setupMenu(): void {
 
   on('menu-undo', undo);
   on('menu-redo', redo);
-  on('menu-sort', () => mutateDocument('Sort', () => doc.sort()));
+  on('menu-sort', () => {
+    mutateDocument('Sort', () => doc.sort());
+    notify('success', t('status.sorted'));
+  });
   on('menu-renumber', () => {
     mutateDocument('Renumber', () => doc.assignNumbers());
     resetViewerSelection();
+    notify('success', t('status.renumbered'));
   });
   on('menu-merge', mergeOverlappingNodesWithPreview);
   on('menu-duplicate', duplicateSelectedRows);
@@ -360,7 +447,7 @@ function setupMenu(): void {
   on('menu-add-loadcase', addLoadCase);
   on('menu-copy-loadcase', duplicateLoadCase);
   on('menu-remove-loadcase', removeLoadCase);
-  on('menu-load-combinations', showLoadCombinationPanel);
+  on('menu-load-combinations', () => loadCasePanel.show());
 
   on('menu-validate', showValidationPanel);
   on('menu-model-info', showModelInfoPanel);
@@ -427,7 +514,8 @@ function mutateDocument<T>(label: string, action: () => T, fitToView = false): T
   refreshDocumentUi(fitToView);
   scheduleAutosave();
   if (invalidatedResults) {
-    updateStatus(
+    notify(
+      'info',
       localText(
         'モデルが変更されたため、読み込み済みの解析結果を破棄しました。',
         'Loaded analysis results were discarded because the model changed.',
@@ -440,10 +528,11 @@ function mutateDocument<T>(label: string, action: () => T, fitToView = false): T
 function undo(): void {
   if (!history.undo()) return;
   const invalidatedResults = invalidateAnalysisResults();
-  resetViewerSelection();
   refreshDocumentUi(false);
+  setCurrentSelection(currentSelection);
   scheduleAutosave();
-  updateStatus(
+  notify(
+    'success',
     invalidatedResults
       ? localText(
           '元に戻しました。解析結果は破棄しました。',
@@ -456,10 +545,11 @@ function undo(): void {
 function redo(): void {
   if (!history.redo()) return;
   const invalidatedResults = invalidateAnalysisResults();
-  resetViewerSelection();
   refreshDocumentUi(false);
+  setCurrentSelection(currentSelection);
   scheduleAutosave();
-  updateStatus(
+  notify(
+    'success',
     invalidatedResults
       ? localText(
           'やり直しました。解析結果は破棄しました。',
@@ -476,6 +566,23 @@ function scheduleAutosave(): void {
 function setupTabs(): void {
   const tabBar = byId('tab-bar');
   tabBar.replaceChildren();
+  const tabSelect = document.getElementById('tab-select') as HTMLSelectElement | null;
+  if (tabSelect) {
+    tabSelect.replaceChildren();
+    for (const definition of tabDefs) {
+      const option = document.createElement('option');
+      option.value = definition.id;
+      option.textContent = t(definition.i18nKey);
+      tabSelect.appendChild(option);
+    }
+    tabSelect.addEventListener('change', () => showTab(tabSelect.value));
+  }
+  const scrollTabs = (direction: -1 | 1): void => {
+    if (typeof tabBar.scrollBy === 'function') tabBar.scrollBy({ left: direction * 160, behavior: 'smooth' });
+    else tabBar.scrollLeft += direction * 160;
+  };
+  document.getElementById('tab-scroll-prev')?.addEventListener('click', () => scrollTabs(-1));
+  document.getElementById('tab-scroll-next')?.addEventListener('click', () => scrollTabs(1));
   for (const definition of tabDefs) {
     const button = createElement('button', 'tab', t(definition.i18nKey));
     button.type = 'button';
@@ -511,9 +618,58 @@ function showTab(tabId: string, preserveSelection = false): void {
     tab.tabIndex = active ? 0 : -1;
   });
   byId('grid-container').setAttribute('aria-labelledby', `tab-${tabId}`);
+  const tabSelect = document.getElementById('tab-select') as HTMLSelectElement | null;
+  if (tabSelect) tabSelect.value = tabId;
+  const activeButton = document.getElementById(`tab-${tabId}`);
+  if (activeButton && typeof activeButton.scrollIntoView === 'function')
+    activeButton.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   updateToolbarVisibility();
   refreshGrid();
   if (preserveSelection) syncGridToViewerSelection(currentSelection);
+}
+
+/** Maximize either the data table or the 3D view; both buttons are mutually exclusive (R09). */
+function setupLayoutControls(): void {
+  const main = byId('main-content');
+  const apply = (mode: 'data' | 'view' | 'none'): void => {
+    main.classList.toggle('data-maximized', mode === 'data');
+    main.classList.toggle('view-maximized', mode === 'view');
+    main.dataset.layout = mode;
+    setPressed('btn-maximize-data', mode === 'data');
+    setPressed('btn-maximize-view', mode === 'view');
+    viewer.resize();
+  };
+  on('btn-maximize-data', () => {
+    const next = main.classList.contains('data-maximized') ? 'none' : 'data';
+    apply(next);
+    notify('info', next === 'data' ? t('layout.maximizeData') : t('layout.restore'));
+  });
+  on('btn-maximize-view', () => {
+    const next = main.classList.contains('view-maximized') ? 'none' : 'view';
+    apply(next);
+    notify('info', next === 'view' ? t('layout.maximizeView') : t('layout.restore'));
+  });
+  apply('none');
+}
+
+/** Shows the active search query and the visible / total row counts under the toolbar (R09). */
+function updateFilterState(): void {
+  const element = document.getElementById('grid-filter-state');
+  if (!element) return;
+  const query = currentGrid?.getSearchQuery() ?? '';
+  const total = currentRows.length;
+  const visible = currentGrid?.getVisibleRowIndices().length ?? total;
+  element.dataset.query = query;
+  element.dataset.visible = String(visible);
+  element.dataset.total = String(total);
+  element.textContent = query ? t('filter.state', query, visible, total) : '';
+}
+
+function resetGridFilters(): void {
+  const search = document.getElementById('grid-search') as HTMLInputElement | null;
+  if (search) search.value = '';
+  currentGrid?.setSearchQuery('');
+  updateFilterState();
 }
 
 function setupGridToolbar(): void {
@@ -599,6 +755,7 @@ function setupGridToolbar(): void {
 
   byId<HTMLInputElement>('grid-search').addEventListener('input', (event) => {
     currentGrid?.setSearchQuery((event.currentTarget as HTMLInputElement).value);
+    updateFilterState();
   });
   on('btn-copy-grid', async () => {
     if (!currentGrid) return;
@@ -666,17 +823,28 @@ function refreshGrid(): void {
     else if (['sections', 'materials', 'springs'].includes(activeTab)) viewer.updateAttributes('members');
     else viewer.updateModel(false);
     renderSelectionInfo(currentSelection);
+    results.syncSelection();
     updateModelSummary();
     updateDirtyUi();
+    updateLoadCaseSelector();
+    toolPanel.notifyModelChanged();
     scheduleAutosave();
-    if (invalidatedResults) {
-      updateStatus(
-        localText(
-          'モデルが変更されたため、読み込み済みの解析結果を破棄しました。',
-          'Loaded analysis results were discarded because the model changed.',
-        ),
-      );
-    }
+    const described = change.changes
+      .slice(0, 3)
+      .map((cell) => `${String(cell.columnKey)}=${String(cell.value)}`)
+      .join(', ');
+    notify(
+      invalidatedResults ? 'info' : 'success',
+      invalidatedResults
+        ? localText(
+            'モデルが変更されたため、読み込み済みの解析結果を破棄しました。',
+            'Loaded analysis results were discarded because the model changed.',
+          )
+        : localText(
+            `${change.changes.length}セルを更新しました（${described}${change.changes.length > 3 ? ', …' : ''}）`,
+            `Updated ${change.changes.length} cell(s) (${described}${change.changes.length > 3 ? ', …' : ''})`,
+          ),
+    );
   });
   grid.setOnSelectionChanged((change) => {
     updateToolbarSelectionState(change.selectedRows.length);
@@ -690,13 +858,16 @@ function refreshGrid(): void {
     selectionSyncInProgress = true;
     currentSelection = selection;
     viewer.setSelection(selection, false);
+    delete byId('selection-info-panel').dataset.dismissed;
     renderSelectionInfo(selection);
+    results.syncSelection();
     selectionSyncInProgress = false;
   });
   const search = byId<HTMLInputElement>('grid-search').value;
   if (search) grid.setSearchQuery(search);
   currentGrid = grid;
   syncGridToViewerSelection(currentSelection);
+  updateFilterState();
 }
 
 function updateToolbarSelectionState(selectedCount: number): void {
@@ -711,12 +882,20 @@ function addRow(): void {
   if (!provider?.add) return;
   const created = mutateDocument('Add row', provider.add);
   if (!created) {
-    updateStatus(localText('追加に必要な参照先がありません。', 'Required referenced entities are missing.'));
+    notify('error', localText('追加に必要な参照先がありません。', 'Required referenced entities are missing.'));
     return;
   }
   refreshGrid();
   const index = currentRows.indexOf(created);
   if (index >= 0) currentGrid?.selectRow(index, { scroll: true, focus: true });
+  const number = (created as { number?: number; nodeNumber?: number }).number ?? (created as { nodeNumber?: number }).nodeNumber;
+  notify(
+    'success',
+    localText(
+      `${t(tabDefs.find((tab) => tab.id === activeTab)!.i18nKey)}に行を追加しました${number !== undefined ? `（番号 ${number}）` : ''}`,
+      `Added a row to ${t(tabDefs.find((tab) => tab.id === activeTab)!.i18nKey)}${number !== undefined ? ` (number ${number})` : ''}`,
+    ),
+  );
 }
 
 async function deleteSelectedRows(): Promise<void> {
@@ -730,30 +909,44 @@ async function deleteSelectedRows(): Promise<void> {
     cancelLabel: t('dialog.cancel'),
     destructive: true,
   });
-  if (!confirmed) return;
+  if (!confirmed) {
+    notify('cancel', localText('行の削除を取り消しました。', 'Row deletion cancelled.'));
+    return;
+  }
   let dependencyError: string | null = null;
   mutateDocument('Delete rows', () => {
     dependencyError = provider.remove!(selected);
   });
   if (dependencyError) {
-    updateStatus(dependencyError);
+    notify('error', dependencyError);
     return;
   }
   resetViewerSelection();
   refreshGrid();
+  notify('success', localText(`${selected.length}行を削除しました。`, `Deleted ${selected.length} row(s).`));
 }
 
 function duplicateSelectedRows(): void {
   const provider = activeProvider();
   const selected = currentGrid?.getSelectedRows() ?? [];
   if (!provider?.duplicate || selected.length === 0) {
-    updateStatus(localText('複製する行を選択してください。', 'Select rows to duplicate.'));
+    notify('error', localText('複製する行を選択してください。', 'Select rows to duplicate.'));
     return;
   }
   const duplicates = mutateDocument('Duplicate rows', () => provider.duplicate!(selected));
   refreshGrid();
   const indices = duplicates.map((item) => currentRows.indexOf(item)).filter((index) => index >= 0);
   currentGrid?.setSelectedRowIndices(indices);
+  const first = duplicates[0];
+  if (first && provider.selectionForRow) setCurrentSelection(provider.selectionForRow(first), { syncGrid: false });
+  const numbers = duplicates.map((item) => (item as { number?: number }).number).filter((number) => number !== undefined);
+  notify(
+    'success',
+    localText(
+      `${duplicates.length}行を複製しました${numbers.length ? `（番号 ${numbers.join(', ')}）` : ''}`,
+      `Duplicated ${duplicates.length} row(s)${numbers.length ? ` (numbers ${numbers.join(', ')})` : ''}`,
+    ),
+  );
 }
 
 async function changeSelectedNumber(): Promise<void> {
@@ -761,30 +954,45 @@ async function changeSelectedNumber(): Promise<void> {
   const selected = currentGrid?.getSelectedRows() ?? [];
   if (!provider?.numberKind || selected.length !== 1) return;
   const row = selected[0] as { number: number };
+  const oldNumber = row.number;
   const values = await requestFields(dialogService, localText('番号を変更', 'Change number'), [
     {
       name: 'number',
       label: localText('新しい番号', 'New number'),
       value: String(row.number),
       type: 'number',
+      integer: true,
+      min: 1,
     },
   ]);
-  if (!values) return;
+  if (!values) {
+    notify('cancel', localText('番号変更を取り消しました。', 'Number change cancelled.'));
+    return;
+  }
   const newNumber = Number(values.number);
   mutateDocument('Change entity number', () =>
     doc.changeEntityNumber(provider.numberKind!, row.number, newNumber),
   );
-  currentSelection = provider.selectionForRow?.(row) ?? { kind: 'none' };
-  viewer.setSelection(currentSelection, false);
   refreshGrid();
-  syncGridToViewerSelection(currentSelection);
+  // The row object now carries the new number; re-derive the selection from it (R08).
+  setCurrentSelection(provider.selectionForRow?.(row) ?? { kind: 'none' });
+  notify(
+    'success',
+    localText(
+      `番号を変更しました: ${oldNumber} → ${row.number}（参照先も更新）`,
+      `Changed number ${oldNumber} → ${row.number} (references updated)`,
+    ),
+  );
 }
 
 function setupViewer(): void {
   viewer = new ModelViewer(byId('viewer-panel'), doc);
   viewer.setOnSelectionChanged((selection) => {
     currentSelection = selection;
+    // An explicit pick in the view re-opens a dismissed info panel.
+    delete byId('selection-info-panel').dataset.dismissed;
     renderSelectionInfo(selection);
+    results.syncSelection();
     if (!selectionSyncInProgress) syncGridToViewerSelection(selection, true);
   });
   viewer.setOnDrawingEvent(handleDrawingEvent);
@@ -849,10 +1057,13 @@ function toggleDrawingMode(mode: Exclude<DrawingMode, 'none'>): void {
     return;
   }
   const next = viewer.getDrawingMode() === mode ? 'none' : mode;
-  viewer.setDrawingMode(next, { gridSpacing: 100, snapToGrid: true, snapToNodes: true });
+  viewer.setDrawingMode(next);
   updateViewerToggleStates();
   updateDrawingHint();
-  if (next !== 'none') viewer.focus();
+  if (next !== 'none') {
+    drawingPanel.show();
+    viewer.focus();
+  } else drawingPanel.hide();
 }
 
 function updateDrawingHint(): void {
@@ -906,6 +1117,7 @@ function updateViewerToggleStates(): void {
   setPressed('menu-show-node-num', viewer.showNodeNumbers);
   setPressed('menu-show-member-num', viewer.showMemberNumbers);
   setPressed('menu-show-wall-num', viewer.showWallNumbers);
+  setPressed('menu-local-axes', viewer.getLocalAxesVisible());
   setPressed('view-results', layers.results && viewer.getAnalysisResults() !== null);
 }
 
@@ -913,7 +1125,9 @@ function handleDrawingEvent(event: DrawingEvent): void {
   if (event.type === 'cancel') {
     viewer.setDrawingMode('none');
     byId('drawing-hint').classList.add('hidden');
+    drawingPanel.hide();
     updateViewerToggleStates();
+    notify('cancel', localText('作図を取り消しました。', 'Drawing cancelled.'));
     return;
   }
   if (event.type === 'selection-move') {
@@ -925,14 +1139,24 @@ function handleDrawingEvent(event: DrawingEvent): void {
       '終点をクリックしてください。',
       'Click the member end point.',
     );
+    drawingPanel.syncMode();
     return;
   }
   if (event.type === 'node-create') {
-    if (event.existingNodeNumber) return;
+    if (event.existingNodeNumber) {
+      notify('info', localText(`節点 ${event.existingNodeNumber} が既にあります。`, `Node ${event.existingNodeNumber} already exists there.`));
+      return;
+    }
     const node = mutateDocument('Draw node', () => doc.addNode(doc.createNode(...event.position)));
-    currentSelection = { kind: 'node', nodeNumber: node.number };
-    viewer.setSelection(currentSelection);
-    showTab('nodes', true);
+    showTab('nodes');
+    setCurrentSelection({ kind: 'node', nodeNumber: node.number });
+    notify(
+      'success',
+      localText(
+        `節点 ${node.number} を (${event.position.map((value) => Math.round(value * 1000) / 1000).join(', ')}) に作図しました`,
+        `Drew node ${node.number} at (${event.position.map((value) => Math.round(value * 1000) / 1000).join(', ')})`,
+      ),
+    );
     return;
   }
   if (event.type === 'member-create') {
@@ -944,16 +1168,23 @@ function handleDrawingEvent(event: DrawingEvent): void {
         ? doc.findNodeByNumber(event.endNodeNumber)
         : doc.addNode(doc.createNode(...event.end));
       if (!start || !end || start.number === end.number)
-        throw new Error('A member requires two distinct nodes.');
+        throw new Error(localText('部材には異なる2節点が必要です。', 'A member requires two distinct nodes.'));
       const created = doc.createMember();
       created.iNodeNumber = start.number;
       created.jNodeNumber = end.number;
       created.sectionNumber = ensureDefaultSection().number;
       return doc.addMember(created);
     });
-    currentSelection = { kind: 'member', memberNumber: member.number };
-    viewer.setSelection(currentSelection);
-    showTab('members', true);
+    showTab('members');
+    setCurrentSelection({ kind: 'member', memberNumber: member.number });
+    drawingPanel.syncMode();
+    notify(
+      'success',
+      localText(
+        `部材 ${member.number}（節点 ${member.iNodeNumber} → ${member.jNodeNumber}）を作図しました`,
+        `Drew member ${member.number} (nodes ${member.iNodeNumber} → ${member.jNodeNumber})`,
+      ),
+    );
   }
 }
 
@@ -980,7 +1211,8 @@ function transformSelection(
     .map((number) => doc.findNodeByNumber(number))
     .filter((node): node is Node => node !== undefined);
   if (sourceNodes.length === 0) {
-    updateStatus(
+    notify(
+      'error',
       localText('移動または複製する要素が見つかりません。', 'The selected entity is no longer available.'),
     );
     return;
@@ -1050,28 +1282,48 @@ function transformSelection(
     }
   });
 
-  currentSelection = nextSelection;
-  viewer.setSelection(nextSelection, false);
   viewer.setDrawingMode('none');
   byId('drawing-hint').classList.add('hidden');
+  drawingPanel.hide();
   updateViewerToggleStates();
   const tabId =
     nextSelection.kind === 'node' ? 'nodes' : nextSelection.kind === 'member' ? 'members' : 'walls';
-  showTab(tabId, true);
-  updateStatus(
+  showTab(tabId);
+  setCurrentSelection(nextSelection);
+  const describe = (item: ViewerSelection): string =>
+    item.kind === 'node'
+      ? `${localText('節点', 'node')} ${item.nodeNumber}`
+      : item.kind === 'member'
+        ? `${localText('部材', 'member')} ${item.memberNumber}`
+        : item.kind === 'wall'
+          ? `${localText('壁', 'wall')} ${item.wallNumber}`
+          : '';
+  notify(
+    'success',
     duplicate
-      ? localText('選択要素を複製しました。', 'Duplicated the selected entity.')
+      ? localText(
+          `${describe(selection)} を複製しました → ${describe(nextSelection)}（Δ ${delta.map((value) => Math.round(value * 1000) / 1000).join(', ')} cm）`,
+          `Duplicated ${describe(selection)} → ${describe(nextSelection)} (Δ ${delta.map((value) => Math.round(value * 1000) / 1000).join(', ')} cm)`,
+        )
       : selection.kind === 'node'
-        ? localText('節点を移動しました。', 'Moved the node.')
+        ? localText(`節点 ${selection.nodeNumber} を移動しました。`, `Moved node ${selection.nodeNumber}.`)
         : localText(
-            '構成節点を移動しました。共有節点に接続する要素も追従しています。',
-            'Moved the constituent nodes; entities connected to shared nodes followed.',
+            `${describe(selection)} の構成節点を移動しました。共有節点に接続する要素も追従しています。`,
+            `Moved the nodes of ${describe(selection)}; entities connected to shared nodes followed.`,
           ),
   );
 }
 
 function setupSelectionPanel(): void {
-  on('selection-info-close', resetViewerSelection);
+  // "×" only hides the panel; "Clear selection" also deselects (R17).
+  on('selection-info-close', () => {
+    byId('selection-info-panel').classList.add('hidden');
+    byId('selection-info-panel').dataset.dismissed = 'true';
+  });
+  on('selection-info-clear', () => {
+    resetViewerSelection();
+    notify('info', localText('選択を解除しました。', 'Selection cleared.'));
+  });
 }
 
 function resetViewerSelection(): void {
@@ -1079,6 +1331,33 @@ function resetViewerSelection(): void {
   viewer.clearSelection(false);
   currentGrid?.clearSelection(false);
   renderSelectionInfo(currentSelection);
+  results.syncSelection();
+}
+
+/** Resolves a selection against the model; entities that no longer exist yield `none`. */
+function resolveSelection(selection: ViewerSelection): ViewerSelection {
+  if (selection.kind === 'node' && !doc.findNodeByNumber(selection.nodeNumber)) return { kind: 'none' };
+  if (selection.kind === 'member' && !doc.findMemberByNumber(selection.memberNumber)) return { kind: 'none' };
+  if (selection.kind === 'wall' && !doc.walls.some((wall) => wall.number === selection.wallNumber))
+    return { kind: 'none' };
+  return selection;
+}
+
+/**
+ * Single entry point for selection changes made by the application (number
+ * changes, duplicates, drawing, undo). Keeps the viewer, the info panel, the
+ * grid row and the results values in sync (R08).
+ */
+function setCurrentSelection(
+  selection: ViewerSelection,
+  options: { syncGrid?: boolean; switchTab?: boolean } = {},
+): void {
+  const resolved = resolveSelection(selection);
+  currentSelection = resolved;
+  viewer.setSelection(resolved, false);
+  renderSelectionInfo(resolved);
+  results.syncSelection();
+  if (options.syncGrid !== false) syncGridToViewerSelection(resolved, options.switchTab ?? false);
 }
 
 function syncGridToViewerSelection(selection: ViewerSelection, switchTab = false): void {
@@ -1106,7 +1385,21 @@ function syncGridToViewerSelection(selection: ViewerSelection, switchTab = false
 }
 
 function renderSelectionInfo(selection: ViewerSelection): void {
+  const panel = byId('selection-info-panel');
+  const previousKey = panel.dataset.selectionKey ?? '';
+  const key =
+    selection.kind === 'node'
+      ? `node:${selection.nodeNumber}`
+      : selection.kind === 'member'
+        ? `member:${selection.memberNumber}`
+        : selection.kind === 'wall'
+          ? `wall:${selection.wallNumber}`
+          : '';
   renderSelectionPanel(doc, selection);
+  panel.dataset.selectionKey = key;
+  // A panel the user dismissed stays hidden until a different entity is selected.
+  if (panel.dataset.dismissed === 'true' && key && key === previousKey) panel.classList.add('hidden');
+  else delete panel.dataset.dismissed;
 }
 
 function updateLoadCaseSelector(): void {
@@ -1123,11 +1416,27 @@ function updateLoadCaseSelector(): void {
   selector.onchange = () => {
     const nextIndex = Number(selector.value);
     if (!Number.isInteger(nextIndex) || nextIndex < 0 || nextIndex >= doc.loadCaseCount) return;
-    doc.loadCaseIndex = nextIndex;
-    viewer.setLoadCase(nextIndex);
-    refreshGrid();
-    updateModelSummary();
+    setActiveLoadCaseIndex(nextIndex);
+    notify(
+      'info',
+      localText(
+        `表示する荷重ケース: ${describeLoadCase(doc, doc.loadCases[nextIndex].id)}`,
+        `Displayed load case: ${describeLoadCase(doc, doc.loadCases[nextIndex].id)}`,
+      ),
+    );
+    void loadCasePanel.onActiveCaseChanged().catch(reportError);
   };
+}
+
+/** Switches the displayed load case (view state, not a history entry) and keeps every view in step. */
+function setActiveLoadCaseIndex(index: number): void {
+  if (!Number.isInteger(index) || index < 0 || index >= doc.loadCaseCount) return;
+  doc.loadCaseIndex = index;
+  viewer.setLoadCase(index);
+  const selector = document.getElementById('load-case-selector') as HTMLSelectElement | null;
+  if (selector) selector.value = String(index);
+  refreshGrid();
+  updateModelSummary();
 }
 
 async function addLoadCase(): Promise<void> {
@@ -1142,19 +1451,30 @@ async function addLoadCase(): Promise<void> {
     },
     { name: 'memo', label: localText('メモ', 'Memo'), type: 'textarea' },
   ]);
-  if (!values) return;
-  mutateDocument('Add load case', () => {
-    doc.addLoadCase({ name: values.name, type: values.type, memo: values.memo });
+  if (!values) {
+    notify('cancel', localText('荷重ケースの追加を取り消しました。', 'Load case addition cancelled.'));
+    return;
+  }
+  const created = mutateDocument('Add load case', () => {
+    const loadCase = doc.addLoadCase({ name: values.name, type: values.type, memo: values.memo });
     doc.loadCaseIndex = doc.loadCaseCount - 1;
+    return loadCase;
   });
+  updateLoadCaseSelector();
+  void loadCasePanel.onActiveCaseChanged().catch(reportError);
+  notify('success', localText(`荷重ケースを追加しました: ${describeLoadCase(doc, created.id)}`, `Added load case ${describeLoadCase(doc, created.id)}`));
 }
 
 function duplicateLoadCase(): void {
-  mutateDocument('Duplicate load case', () => {
+  const copy = mutateDocument('Duplicate load case', () => {
     const sourceIndex = doc.loadCaseIndex;
-    doc.duplicateLoadCase(sourceIndex);
+    const loadCase = doc.duplicateLoadCase(sourceIndex);
     doc.loadCaseIndex = sourceIndex + 1;
+    return loadCase;
   });
+  updateLoadCaseSelector();
+  void loadCasePanel.onActiveCaseChanged().catch(reportError);
+  notify('success', localText(`荷重ケースを複製しました: ${describeLoadCase(doc, copy.id)}`, `Duplicated load case → ${describeLoadCase(doc, copy.id)}`));
 }
 
 async function removeLoadCase(): Promise<void> {
@@ -1170,89 +1490,16 @@ async function removeLoadCase(): Promise<void> {
     cancelLabel: t('dialog.cancel'),
     destructive: true,
   });
-  if (!confirmed) return;
+  if (!confirmed) {
+    notify('cancel', localText('荷重ケースの削除を取り消しました。', 'Load case deletion cancelled.'));
+    return;
+  }
+  const label = describeLoadCase(doc, current.id);
   mutateDocument('Remove load case', () => doc.removeLoadCase(doc.loadCaseIndex));
   updateLoadCaseSelector();
   refreshGrid();
-}
-
-function showLoadCombinationPanel(): void {
-  const content = createElement('div');
-  const currentCase = doc.loadCases[doc.loadCaseIndex];
-  if (currentCase) {
-    const caseForm = createElement('div', 'panel-form');
-    const name = createElement('input');
-    name.value = currentCase.name;
-    const type = createElement('select');
-    for (const value of Object.values(LoadCaseType)) {
-      const item = document.createElement('option');
-      item.value = value;
-      item.textContent = value;
-      item.selected = currentCase.type === value;
-      type.appendChild(item);
-    }
-    const memo = createElement('textarea');
-    memo.value = currentCase.memo;
-    caseForm.append(
-      labelled(localText('現在のケース名', 'Current case name'), name),
-      labelled(localText('種別', 'Type'), type),
-      labelled(localText('メモ', 'Memo'), memo),
-      createButton(localText('ケース情報を更新', 'Update case'), () => {
-        mutateDocument('Edit load case metadata', () => {
-          currentCase.name = name.value.trim() || currentCase.name;
-          currentCase.type = type.value;
-          currentCase.memo = memo.value;
-        });
-        updateLoadCaseSelector();
-      }),
-    );
-    content.appendChild(caseForm);
-  }
-  const list = createElement('div', 'diagnostic-list');
-  for (const combination of doc.loadCombinations) {
-    const row = createElement('div', 'diagnostic-item info');
-    const terms = combination.terms.map((term) => `${term.loadCaseId} × ${term.factor}`).join(' + ');
-    row.append(createElement('span', undefined, `${combination.name}: ${terms}`));
-    row.append(
-      createButton(
-        localText('削除', 'Delete'),
-        () => {
-          mutateDocument('Delete load combination', () => {
-            const index = doc.loadCombinations.indexOf(combination);
-            if (index >= 0) doc.loadCombinations.splice(index, 1);
-          });
-          showLoadCombinationPanel();
-        },
-        'toolbar-btn toolbar-btn-danger',
-      ),
-    );
-    list.appendChild(row);
-  }
-  content.appendChild(list);
-  const form = createElement('div', 'panel-form');
-  const combinationName = createElement('input');
-  combinationName.placeholder = localText('例: 長期', 'e.g. Service');
-  const terms = createElement('input');
-  terms.placeholder = 'LC1:1.0, LC2:0.5';
-  form.append(
-    labelled(localText('組合せ名', 'Combination name'), combinationName),
-    labelled(localText('係数（ID:係数）', 'Terms (ID:factor)'), terms),
-    createButton(localText('組合せを追加', 'Add combination'), () => {
-      const parsedTerms = terms.value
-        .split(',')
-        .filter(Boolean)
-        .map((token) => {
-          const [loadCaseId, factorText] = token.trim().split(':');
-          return { loadCaseId, factor: Number(factorText) };
-        });
-      mutateDocument('Add load combination', () =>
-        doc.addLoadCombination(combinationName.value.trim(), parsedTerms),
-      );
-      showLoadCombinationPanel();
-    }),
-  );
-  content.appendChild(form);
-  toolPanel.open(t('loadcase.combinations'), content);
+  void loadCasePanel.onActiveCaseChanged().catch(reportError);
+  notify('success', localText(`荷重ケース ${label} を削除しました`, `Deleted load case ${label}`));
 }
 
 function showValidationPanel(): void {
@@ -1323,9 +1570,11 @@ function refreshDocumentUi(fitToView: boolean): void {
   refreshGrid();
   updateLoadCaseSelector();
   renderSelectionInfo(currentSelection);
+  results.syncSelection();
   updateDirtyUi();
   updateModelSummary();
   updateViewerToggleStates();
+  toolPanel.notifyModelChanged();
 }
 
 function updateDirtyUi(): void {
@@ -1344,7 +1593,7 @@ function updateModelSummary(): void {
 }
 
 function updateStatus(message: string): void {
-  byId('status-text').textContent = message;
+  notify('info', message);
 }
 
 function setupResizer(): void {
@@ -1403,6 +1652,15 @@ function setupKeyboardShortcuts(): void {
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
       target instanceof HTMLSelectElement;
+    // A grid cell that has been committed (Enter/Tab) is in navigation mode: Undo/Redo
+    // then apply to the model, not to the text field (R06).
+    const inCommittedGridCell =
+      editing &&
+      target instanceof HTMLElement &&
+      target.classList.contains('data-grid-editor') &&
+      currentGrid !== null &&
+      !currentGrid.isEditing();
+    const textEditing = editing && !inCommittedGridCell;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
       void saveJson();
@@ -1410,14 +1668,14 @@ function setupKeyboardShortcuts(): void {
       event.preventDefault();
       void openFilePicker();
     } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
-      if (editing) return;
+      if (textEditing) return;
       event.preventDefault();
       undo();
     } else if (
       (event.ctrlKey || event.metaKey) &&
       (event.key.toLowerCase() === 'y' || (event.key.toLowerCase() === 'z' && event.shiftKey))
     ) {
-      if (editing) return;
+      if (textEditing) return;
       event.preventDefault();
       redo();
     } else if (event.key === 'Delete' && !editing) {
@@ -1425,6 +1683,7 @@ function setupKeyboardShortcuts(): void {
       void deleteSelectedRows();
     } else if (event.key === 'Escape') {
       viewer.setDrawingMode('none');
+      drawingPanel.hide();
       toolPanel.close();
       resetViewerSelection();
       byId('drawing-hint').classList.add('hidden');

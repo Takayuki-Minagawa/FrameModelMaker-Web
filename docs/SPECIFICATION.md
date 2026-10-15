@@ -2,10 +2,10 @@
 
 # FrameModelMaker-Web 技術仕様
 
-- 対象バージョン: 1.1.0
+- 対象バージョン: 1.2.0（2026-10-15 CUA 評価対応を含む）
 - モデル JSON: formatVersion 2
 - 解析結果 JSON: formatVersion 1
-- 最終更新: 2026-07-14
+- 最終更新: 2026-10-15
 
 この文書は FrameModelMaker-Web のデータモデル、整合性規則、ファイル形式、編集・表示サービスと既知の制約を定義します。画面の使い方は [README](../README.md)、実装前の監査と対応状況は [追加機能提案](FEATURE_RECOMMENDATIONS.md) を参照してください。
 
@@ -193,7 +193,7 @@ FrameModelMaker 固有モデルへ直接写像できない値を `AnalysisMetada
 - `autosaveVersion: 1` の復旧ペイロードをシリアライズ
 - `KeyValueStorage` を介して localStorage 等へ保存可能
 
-現在の実装は JSON スナップショット方式で、アプリ UI は最大100件の履歴を `localStorage` へベストエフォートで保存します。ブラウザのクォータを超える場合は保存に失敗するため、復旧を保証するものではありません。非常に大きなモデル向けの差分コマンド履歴、IndexedDB バックエンド、復旧候補を選択する UI は未実装です。
+現在の実装は JSON スナップショット方式で、アプリ UI は最大100件・64MiB を目安に履歴を IndexedDB の復旧ストアへ保存し、復旧センターから候補（モデル名・日時）を復元・削除できます。旧 `localStorage` データは検証後に移行します。ブラウザーの保存容量を超える場合は保存に失敗するため、復旧を保証するものではなく、差分コマンド履歴は採用していません。
 
 ### 3.4 モデル検証
 
@@ -390,19 +390,25 @@ Three.js ビューアは節点、部材、壁、境界条件、荷重、結果�
 - タブは `role="tablist"`、表は `role="grid"`
 - ダイアログは native `dialog`
 - フォーカス可視化、Escape、主要ショートカット、`aria-live`
-- 言語変更時に `html lang` を更新
-- 狭い画面ではビューと編集パネルを縦配置
+- 言語変更時に `html lang` を更新し、メニュー・ダイアログ既定ボタン・復旧ボタンも同じ言語に揃える
+- 狭い画面ではビューと編集パネルを縦配置。タブは横スクロール＋タブ一覧セレクト、表／ビューの最大化を提供
+- ステータス通知は `#status-text` の `data-kind`（info / success / error / cancel）と `data-sequence` で機械可読
+- 表示トグル（番号・荷重・境界条件・局所軸・投影・作図モード・最大化）は `aria-pressed` を持つ
+- 共通入力フォームの数値は長さ・座標・角度を `step="any"`、個数を整数とし、方式に応じて不要な項目を隠す
+- 開いているツールパネルはモデル変更通知を受けて再集計・再同期する
 - `prefers-reduced-motion` を尊重
 
 言語は日本語 / 英語、テーマはライト / ダークです。ユーザー設定はブラウザ保存領域へ記録します。
 
 ## 11. ビルド、テスト、CI
 
-動作要件は Node.js `^20.19.0 || >=22.12.0` です。主要依存は TypeScript 5.9、Vite 8、Vitest 4、Three.js 0.185.1、yaml 2.9 です。
+動作要件は Node.js `^22.12.0 || ^24.0.0` です。主要依存は TypeScript 5.9、Vite 8、Vitest 4、Three.js 0.185.1、yaml 2.9 です。
 
 本番ビルドは Three.js と YAML を個別チャンクに分離します。YAML 読込処理は操作時に遅延ロードできます。Vitest は `tests/**/*.test.ts` を対象とし、V8 カバレッジを text / json / html / lcov で出力します。
 
-GitHub Actions は Node.js 20.19 と 22.12 で型チェック、テスト、ビルド、`npm audit --audit-level=high` を実行します。デプロイ前にも同じ品質ゲートを通します。Dependabot は npm と GitHub Actions を定期確認します。
+GitHub Actions は Node.js 22 と 24 で型チェック、テスト、ビルド、`npm audit --audit-level=high` を実行します。デプロイ前にも同じ品質ゲートを通します。公開前には `npm run verify:release` で Chromium の E2E（既存 11 件と CUA 回帰 8 件）も実行します。Dependabot は npm と GitHub Actions を定期確認します。
+
+アプリ画面のテストは `tests/app/support/appHarness.ts` が `index.html` と `FrameApplication.initialize()` を jsdom で起動し、WebGL ビューアを `FakeModelViewer` に置き換えて実行します。各パネルは `doc` / `ToolPanel` / `notify` を注入する関数として切り出され、単体で検証できます。
 
 ## 12. 既知の制約
 
@@ -412,6 +418,7 @@ GitHub Actions は Node.js 20.19 と 22.12 で型チェック、テスト、ビ�
 - 壁厚が未定義のため、壁数量は件数・形状確認に限定する。
 - 断面自動計算の J は近似式を含む。設計規準による照査は利用者が行う。
 - 解析結果表示は実験的で、固定単位・座標規約以外を変換しない。モデル参照は読込時に照合するが、部材局所軸、符号、値の妥当性は入力元が表示前に検証する。
-- 復旧スナップショットは `localStorage` の容量内に限る。IndexedDB と復旧候補選択 UI は未実装。
-- Web Worker、完全な表仮想化、差分履歴は未実装。極端に大きいファイルではブラウザのメモリ制限を受ける。
+- 復旧スナップショットは IndexedDB の容量内に限る。差分履歴は未実装。
+- 大きな JSON / YAML の解析は Web Worker で行うが、適用・編集・Undo・書出しはメインスレッドで処理する。極端に大きいファイルではブラウザのメモリ制限を受ける。
+- 部材荷重の長さ方式・種別・方向コード（0〜3）とバネ方式（0/1）の構造的な意味は解析プログラム側の定義に従う。本アプリは列説明にコード値と単位を示すが、意味を独自に定義しない。
 - 入力ファイルは 100 MiB を上限とする。

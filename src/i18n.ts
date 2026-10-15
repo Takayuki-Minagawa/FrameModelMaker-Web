@@ -200,56 +200,98 @@ const messages: Record<Lang, Record<string, string>> = {
     'results.pause': '一時停止',
     'results.scale': '変形倍率',
 
+    'menu.importCsv': 'CSV入力',
+    'menu.localAxes': '局所軸 表示/非表示',
+    'menu.pattern': '配列複製',
+    'menu.frameTemplate': '骨組生成',
+    'menu.bulkAttribute': '一括属性変更',
+    'menu.presets': 'テンプレート・ビュー',
+    'menu.theme': 'テーマ切替',
+    'menu.language': '言語切替',
+    'menu.help': 'ヘルプ',
+    'dialog.ok': 'OK',
+    'layout.maximizeView': 'ビューを最大化（表を隠す）',
+    'layout.maximizeData': '表を最大化（ビューを隠す）',
+    'layout.restore': '表示を元に戻す',
+    'tabs.scrollPrev': '前のタブへスクロール',
+    'tabs.scrollNext': '次のタブへスクロール',
+    'tabs.list': 'タブ一覧',
+    'filter.none': '絞り込みなし',
+    'filter.state': '検索「{0}」: {1} / {2} 行を表示',
+    'draw.settings': '作図設定（数値入力）',
+    'draw.closeSettings': '作図設定を閉じる',
+    'selection.clear': '選択解除',
+    'selection.closeInfo': '情報パネルを閉じる（選択は維持）',
+    'panel.collapse': 'パネルを折り畳む／展開する',
+    'panel.dock': 'パネルをドッキング／フロート',
+    'panel.close': 'パネルを閉じる',
+    'status.cancelled': '取り消しました',
+
     // ヘルプ
     'help.title': 'FrameModelMaker-Web ヘルプ',
     'help.close': '閉じる',
     'help.content': `
 <h3>概要</h3>
-<p>FrameModelMaker-Web は、立体フレーム（骨組構造）の解析モデルを作成・編集・可視化する Web アプリケーションです。シンプルな JSON 形式のファイルを読み書きでき、解析用 YAML を形状確認用にインポートできます。</p>
+<p>FrameModelMaker-Web は、立体フレーム（骨組構造）の解析モデルをブラウザで作成・検証・可視化し、JSON / 解析用 YAML で受け渡す Web アプリケーションです。FEM 解析は行いません。解析結果は外部ソルバーの JSON を読み込んで表示します。</p>
 
-<h3>ファイル操作</h3>
+<h3>ファイル</h3>
 <table>
-<tr><td><b>新規作成</b></td><td>モデルを初期化します</td></tr>
-<tr><td><b>開く</b></td><td>.json ファイル、または解析用 .yaml/.yml ファイルを読み込みます</td></tr>
-<tr><td><b>保存</b></td><td>現在のモデルを .json ファイルとしてダウンロードします</td></tr>
-<tr><td><b>サンプル読込</b></td><td>内蔵のオリジナル建物モデル JSON サンプルを読み込みます</td></tr>
+<tr><td><b>新規作成</b></td><td>空のモデルへ切り替えます（未保存変更は確認）</td></tr>
+<tr><td><b>開く</b></td><td>.json（Frame JSON v2 / 旧 v1）または解析用 .yaml/.yml を読み込み、件数・単位・診断をプレビューしてから適用します</td></tr>
+<tr><td><b>保存</b></td><td>現在のモデルを JSON v2 としてダウンロードします（Ctrl/Cmd+S）</td></tr>
+<tr><td><b>解析YAMLを書き出す</b></td><td>出力前に要素数・単位・欠落項目（壁・カスタムバネ・荷重値）の表を確認します</td></tr>
+<tr><td><b>CSV入力 / 現在の表をCSVで書き出す</b></td><td>現在のタブに対して列対応・番号キー・単位（cm/kN または mm/N）を指定して取り込み、または書き出します</td></tr>
+<tr><td><b>サンプル読込</b></td><td>同梱モデル（節点150・部材248・壁32・荷重8ケース）を読み込みます</td></tr>
 </table>
 
-<h3>JSON 入力フォーマット</h3>
-<p>入力データは、クラス管理している要素をそのまま扱えるシンプルな JSON 形式です。不要な説明ヘッダーは含みません。</p>
+<h3>データ編集と Undo / Redo</h3>
+<p>右側のタブで節点・境界条件・材料・断面・バネ・部材・壁・各荷重を編集します。クリックまたは F2 / Enter で編集、Escape で未確定値を取り消し、Enter / Tab で確定します。確定後にセルにフォーカスがある状態の Ctrl/Cmd+Z・Ctrl/Cmd+Y（Shift+Z）はモデルの Undo / Redo、文字入力中はテキストの取り消しです。編集メニューからも Undo / Redo できます。</p>
+<p>列ヘッダーにポインターを合わせると、列の意味・単位・正方向・例が表示されます。検索欄で表示行を絞り込み、絞り込み状態はツールバー下に「検索「…」: n / m 行」と表示されます。タブは左右スクロールボタン・タブ一覧セレクトから選べ、「表を最大化」「ビューを最大化」で片方を隠せます。</p>
 
-<h3>YAML インポート</h3>
-<p>解析用 YAML は、節点・線材・境界条件を現在の編集モデルへ変換して読み込みます。保存は従来どおり JSON 形式です。</p>
+<h3>貼り付け・一括属性変更・CSV</h3>
+<p>Ctrl/Cmd+C / V で TSV をコピー＆貼り付けします。貼り付けは変更内容をプレビューし、エラーがあれば全件を止め、1回の Undo で戻せます。「一括属性変更」は選択行の1列を同じ値に変更します。</p>
 
-<h3>3D ビュー操作</h3>
+<h3>配列複製・骨組生成</h3>
+<p>選択した節点・部材・壁を直線（ΔX/ΔY/ΔZ・個数）、回転（中心・軸・角度・個数）、鏡映（面の法線・座標）で複製します。長さ・座標・角度は小数（例: 12.5 cm、0.5°）を使えます。実行前に対象番号・追加件数・複製先座標を確認できます。「骨組生成」はスパン数・層数・スパン・階高・断面からラーメン／トラス形状を追加します。</p>
+
+<h3>3D / 2D ビュー</h3>
 <table>
-<tr><td><b>左クリック</b></td><td>節点・部材を選択して情報パネルを表示（空白クリックで解除）</td></tr>
-<tr><td><b>左ドラッグ</b></td><td>モデルを回転</td></tr>
-<tr><td><b>右ドラッグ</b></td><td>視点を平行移動</td></tr>
-<tr><td><b>ホイール</b></td><td>ズームイン / ズームアウト</td></tr>
+<tr><td><b>左ドラッグ / 右ドラッグ / ホイール</b></td><td>回転 / 平行移動 / ズーム</td></tr>
+<tr><td><b>要素クリック</b></td><td>節点・部材・壁を選択。情報パネルの「×」はパネルを閉じるだけで、「選択解除」で選択を解除します</td></tr>
+<tr><td><b>2D / EX / EY</b></td><td>平面・X立面・Y立面の作図ビュー</td></tr>
+<tr><td><b>●+ / ╱+ / ↔ / ⧉</b></td><td>節点作図・部材作図・移動・複製。作図中は「作図設定」でスナップ間隔・ON/OFF・作業平面・絶対／相対座標を数値入力できます</td></tr>
+<tr><td><b>矢印キー / Enter</b></td><td>キャンバスにフォーカスした状態で照準を移動 / 選択・作図を確定</td></tr>
+<tr><td><b>F / Esc</b></td><td>全体表示 / 選択・作図モード・パネルを閉じる</td></tr>
+</table>
+<p>表示メニューで節点・部材・壁番号、局所軸（x赤・y緑・z青）、荷重、境界条件を切り替えます。モデル情報パネルではレイヤー・色分け（凡例に材料番号を併記）・ラベル密度・選択表示を変更できます。浮動パネルは折り畳み・ドッキング・サイズ変更ができます。</p>
+
+<h3>荷重ケース・荷重組合せ</h3>
+<p>「現在の荷重ケース」で表示・編集対象のケースを切り替えます。荷重組合せパネルは編集対象（表示番号・名前・固定ID）を表示し、ケースを切り替えると入力を同期します。未確定の編集があれば保存・破棄・取消を選べます。組合せはケース選択＋係数の行で作成・編集・複製します。表示番号（1/2）は並び順、LC1/LC2 は固定IDです。</p>
+
+<h3>断面計算・モデル情報・プリセット</h3>
+<p>断面計算は矩形・円形・箱形・H形の寸法から A / J / Iy / Iz / ky / kz を単位付きで算定し、入力変更後は「前回計算値」、失敗時は旧値を破棄して表示します。適用先は断面の追加・削除・番号変更に追従し、未選択では適用できません。モデル情報・数量はモデル変更に追従して再集計し、数量CSV（cm / cm³）は出力時に最新モデルから計算します。プリセットはビュー・断面テンプレートを検索・名前変更・上書き・複製・削除（取り消し可）できます。</p>
+
+<h3>解析結果 JSON（実験的）</h3>
+<p>結果 JSON v1（cm / kN / kN-cm、節点 global-xyz、部材 local-xyz）または OpenSees 変換形式を読み込み、変形・反力・断面力を表示します。パネルにはファイル名・結果名・再生状態・フレーム・時刻が表示され、フレーム／時刻の直接入力、前後・先頭／末尾、再生速度とループを操作できます。選択した節点・部材の数値、最大・最小値、現在フレームの CSV 出力も行えます。モデルを編集すると結果は破棄されます。</p>
+
+<h3>復旧</h3>
+<p>編集内容はこのブラウザーの IndexedDB に自動保存され、右上の復旧センターから候補（モデル名・日時）を復元・削除できます。JSON ファイルも必ず保存してください。</p>
+
+<h3>キーボード</h3>
+<table>
+<tr><td>Ctrl/Cmd+S / O</td><td>保存 / 開く</td></tr>
+<tr><td>Ctrl/Cmd+Z / Y</td><td>元に戻す / やり直す</td></tr>
+<tr><td>Delete</td><td>選択行を削除（参照中の要素は削除不可）</td></tr>
+<tr><td>Esc</td><td>選択・作図モード・パネルを閉じる</td></tr>
+<tr><td>F</td><td>全体表示</td></tr>
+<tr><td>タブ上の ← →</td><td>タブ切替</td></tr>
 </table>
 
-<h3>選択情報パネル</h3>
-<p>3D ビューで節点または部材をクリックすると、ビュー右上に選択要素の詳細情報が表示されます。ヘッダーの × ボタンで閉じることもできます。</p>
-
-<h3>データ編集</h3>
-<p>画面右側のデータパネルで、タブを切り替えてモデルの各要素（節点・部材・断面・材料・荷重など）を直接編集できます。セルの値を変更すると 3D ビューに即座に反映されます。</p>
-
-<h3>編集メニュー</h3>
+<h3>単位系と制限</h3>
 <table>
-<tr><td><b>ソート</b></td><td>節点を Z→Y→X 順に、部材を I 端 Z 順にソートします</td></tr>
-<tr><td><b>番号再割当</b></td><td>全要素の番号を 1 から振り直します</td></tr>
-<tr><td><b>重複ノード統合</b></td><td>距離 2cm 以内の節点を統合します</td></tr>
-</table>
-
-<h3>荷重定義</h3>
-<p>複数の荷重ケースを管理できます。ドロップダウンで荷重定義を切り替え、各ケースの節点荷重・CMQ荷重・部材荷重を個別に編集できます。</p>
-
-<h3>単位系</h3>
-<table>
-<tr><td>長さ</td><td>cm</td></tr>
-<tr><td>力</td><td>kN</td></tr>
-<tr><td>モーメント</td><td>kN*cm</td></tr>
+<tr><td>長さ / 力 / モーメント</td><td>cm / kN / kN·cm（応力 kN/cm²、面積 cm²、断面二次モーメント cm⁴）</td></tr>
+<tr><td>座標系</td><td>X=水平右、Y=水平奥、Z=鉛直上</td></tr>
+<tr><td>制限</td><td>FEM ソルバーは含みません。壁体積は数量集計の対象外、J の自動計算は近似式、YAML 出力は壁・カスタムバネ・荷重値を含みません。読込ファイルの上限は 100 MiB です</td></tr>
 </table>
 `,
   },
@@ -452,56 +494,98 @@ const messages: Record<Lang, Record<string, string>> = {
     'results.pause': 'Pause',
     'results.scale': 'Deformation scale',
 
+    'menu.importCsv': 'Import CSV',
+    'menu.localAxes': 'Local Axes Show/Hide',
+    'menu.pattern': 'Pattern Copy',
+    'menu.frameTemplate': 'Generate Frame',
+    'menu.bulkAttribute': 'Bulk Edit Attributes',
+    'menu.presets': 'Presets & Views',
+    'menu.theme': 'Toggle theme',
+    'menu.language': 'Toggle language',
+    'menu.help': 'Help',
+    'dialog.ok': 'OK',
+    'layout.maximizeView': 'Maximize view (hide table)',
+    'layout.maximizeData': 'Maximize table (hide view)',
+    'layout.restore': 'Restore layout',
+    'tabs.scrollPrev': 'Scroll to previous tabs',
+    'tabs.scrollNext': 'Scroll to next tabs',
+    'tabs.list': 'Tab list',
+    'filter.none': 'No filter',
+    'filter.state': 'Search “{0}”: showing {1} / {2} rows',
+    'draw.settings': 'Drawing settings (numeric input)',
+    'draw.closeSettings': 'Close drawing settings',
+    'selection.clear': 'Clear selection',
+    'selection.closeInfo': 'Close info panel (keep selection)',
+    'panel.collapse': 'Collapse / expand panel',
+    'panel.dock': 'Dock / float panel',
+    'panel.close': 'Close panel',
+    'status.cancelled': 'Cancelled',
+
     // Help
     'help.title': 'FrameModelMaker-Web Help',
     'help.close': 'Close',
     'help.content': `
 <h3>Overview</h3>
-<p>FrameModelMaker-Web is a web application for creating, editing, and visualizing 3D frame (skeletal structure) analysis models. It reads and writes simple JSON model files, and can import analysis YAML for geometry review.</p>
+<p>FrameModelMaker-Web creates, checks and visualizes 3D frame analysis models in the browser and exchanges them as JSON / analysis YAML. It does not run FEM; analysis results are loaded from an external solver's JSON.</p>
 
-<h3>File Operations</h3>
+<h3>File</h3>
 <table>
-<tr><td><b>New</b></td><td>Initialize a new model</td></tr>
-<tr><td><b>Open</b></td><td>Load a .json file or import an analysis .yaml/.yml file</td></tr>
-<tr><td><b>Save</b></td><td>Download the current model as a .json file</td></tr>
-<tr><td><b>Load Sample</b></td><td>Load a built-in JSON sample converted from the original building model</td></tr>
+<tr><td><b>New</b></td><td>Switch to an empty model (unsaved changes are confirmed)</td></tr>
+<tr><td><b>Open</b></td><td>Load .json (Frame JSON v2 / legacy v1) or analysis .yaml/.yml with a preview of counts, units and diagnostics before applying</td></tr>
+<tr><td><b>Save</b></td><td>Download the current model as JSON v2 (Ctrl/Cmd+S)</td></tr>
+<tr><td><b>Export Analysis YAML</b></td><td>Review counts, units and omitted items (walls, custom springs, load values) before exporting</td></tr>
+<tr><td><b>Import CSV / Export Current Grid as CSV</b></td><td>Import into or export from the current tab with column mapping, number keys and units (cm/kN or mm/N)</td></tr>
+<tr><td><b>Load Sample</b></td><td>Load the bundled model (150 nodes, 248 members, 32 walls, 8 load cases)</td></tr>
 </table>
 
-<h3>JSON Input Format</h3>
-<p>Input data uses a simple JSON structure that maps directly to managed class elements, without unrelated explanatory headers.</p>
+<h3>Data editing and Undo / Redo</h3>
+<p>Edit nodes, boundaries, materials, sections, springs, members, walls and loads in the tabs on the right. Click or press F2 / Enter to edit, Escape to cancel an uncommitted value, Enter / Tab to commit. After committing, Ctrl/Cmd+Z and Ctrl/Cmd+Y (Shift+Z) with the cell focused undo / redo the model; while typing they undo the text. The Edit menu offers Undo / Redo as well.</p>
+<p>Hover a column header to see the column meaning, unit, positive direction and an example. The search box filters rows and the filter state is shown under the toolbar as “Search …: n / m rows”. Tabs can be reached with the scroll buttons or the tab list; “Maximize table” / “Maximize view” hide the other half.</p>
 
-<h3>YAML Import</h3>
-<p>Analysis YAML files are converted into the current editable model for node, member, and boundary geometry review. Saving still writes the existing JSON format.</p>
+<h3>Paste, bulk attributes and CSV</h3>
+<p>Ctrl/Cmd+C / V copies and pastes TSV. Pasting previews the changes, stops entirely on errors and can be undone in one step. “Bulk Edit Attributes” sets one column of the selected rows to the same value.</p>
 
-<h3>3D View Controls</h3>
+<h3>Pattern copy and frame generation</h3>
+<p>Copy selected nodes, members and walls linearly (ΔX/ΔY/ΔZ, count), radially (origin, axis, angle, count) or mirrored (plane normal, coordinate). Lengths, coordinates and angles accept decimals (e.g. 12.5 cm, 0.5°). The dialog previews source numbers, added counts and copy coordinates. “Generate Frame” adds a frame / truss from bays, stories, span, height and a section.</p>
+
+<h3>3D / 2D view</h3>
 <table>
-<tr><td><b>Left Click</b></td><td>Select a node/member and show its info panel (click empty space to clear)</td></tr>
-<tr><td><b>Left Drag</b></td><td>Rotate the model</td></tr>
-<tr><td><b>Right Drag</b></td><td>Pan the view</td></tr>
-<tr><td><b>Scroll Wheel</b></td><td>Zoom in / out</td></tr>
+<tr><td><b>Left drag / right drag / wheel</b></td><td>Rotate / pan / zoom</td></tr>
+<tr><td><b>Click entity</b></td><td>Select a node, member or wall. The info panel's “×” only hides the panel; “Clear selection” clears it</td></tr>
+<tr><td><b>2D / EX / EY</b></td><td>Plan, X-elevation and Y-elevation drawing views</td></tr>
+<tr><td><b>●+ / ╱+ / ↔ / ⧉</b></td><td>Draw node, draw member, move, duplicate. While drawing, “Drawing settings” accepts snap spacing, snap toggles, work plane and absolute / relative coordinates</td></tr>
+<tr><td><b>Arrow keys / Enter</b></td><td>With the canvas focused, move the crosshair / confirm a selection or drawing</td></tr>
+<tr><td><b>F / Esc</b></td><td>Fit to view / clear selection, drawing mode and panels</td></tr>
+</table>
+<p>The View menu toggles node, member and wall numbers, local axes (x red, y green, z blue), loads and boundaries. The model information panel changes layers, colors (legend always shows material numbers), label density and selection display. Floating panels can be collapsed, docked and resized.</p>
+
+<h3>Load cases and combinations</h3>
+<p>“Current load case” switches the displayed and edited case. The load combination panel shows the edited case (display number, name, stable ID) and follows the selector; unsaved edits can be saved, discarded or the switch cancelled. Combinations are built from case rows with factors and can be edited and duplicated. Display numbers (1/2) follow the order; LC1/LC2 are stable IDs.</p>
+
+<h3>Section calculator, model information, presets</h3>
+<p>The section calculator derives A / J / Iy / Iz / ky / kz with units from rectangle, circle, box and H dimensions, marks results as “previous values” after inputs change and discards them on errors. The target list follows section additions, deletions and renumbering; applying requires a selected target. Model information recalculates after every change and the quantities CSV (cm / cm³) is computed from the latest model at export time. Presets (views and section templates) can be searched, renamed, overwritten, duplicated and deleted with undo.</p>
+
+<h3>Analysis results JSON (experimental)</h3>
+<p>Load result JSON v1 (cm / kN / kN-cm, nodes global-xyz, members local-xyz) or the OpenSees converter format to show deformation, reactions and section forces. The panel shows file name, result title, playback state, frame and time, with direct frame / time input, previous / next, first / last, speed and loop. Values for the selected node or member, extremes, and a CSV of the current frame are available. Editing the model discards loaded results.</p>
+
+<h3>Recovery</h3>
+<p>Edits are saved automatically to this browser's IndexedDB; the Recovery center (top right) restores or deletes snapshots by model name and time. Always keep a JSON file as well.</p>
+
+<h3>Keyboard</h3>
+<table>
+<tr><td>Ctrl/Cmd+S / O</td><td>Save / open</td></tr>
+<tr><td>Ctrl/Cmd+Z / Y</td><td>Undo / redo</td></tr>
+<tr><td>Delete</td><td>Delete selected rows (referenced entities are protected)</td></tr>
+<tr><td>Esc</td><td>Clear selection, drawing mode and panels</td></tr>
+<tr><td>F</td><td>Fit to view</td></tr>
+<tr><td>← → on a tab</td><td>Switch tabs</td></tr>
 </table>
 
-<h3>Selection Info Panel</h3>
-<p>Click a node or member in the 3D view to show detailed information at the upper-right of the viewer. You can also close it with the × button in the panel header.</p>
-
-<h3>Data Editing</h3>
-<p>Use the tabbed data panel on the right to edit model elements (nodes, members, sections, materials, loads, etc.). Changes are reflected in the 3D view immediately.</p>
-
-<h3>Edit Menu</h3>
+<h3>Units and limits</h3>
 <table>
-<tr><td><b>Sort</b></td><td>Sort nodes by Z→Y→X, members by I-node Z</td></tr>
-<tr><td><b>Renumber</b></td><td>Reassign all element numbers from 1</td></tr>
-<tr><td><b>Merge</b></td><td>Merge nodes within 2cm distance</td></tr>
-</table>
-
-<h3>Load Cases</h3>
-<p>Manage multiple load cases. Switch between them using the dropdown, and edit node loads, CMQ loads, and member loads independently for each case.</p>
-
-<h3>Unit System</h3>
-<table>
-<tr><td>Length</td><td>cm</td></tr>
-<tr><td>Force</td><td>kN</td></tr>
-<tr><td>Moment</td><td>kN*cm</td></tr>
+<tr><td>Length / force / moment</td><td>cm / kN / kN·cm (stress kN/cm², area cm², second moment cm⁴)</td></tr>
+<tr><td>Coordinate system</td><td>X horizontal right, Y horizontal depth, Z vertical up</td></tr>
+<tr><td>Limits</td><td>No FEM solver. Wall volumes are excluded from quantities, auto-calculated J is approximate, YAML export omits walls, custom springs and load values. Input files are limited to 100 MiB</td></tr>
 </table>
 `,
   },

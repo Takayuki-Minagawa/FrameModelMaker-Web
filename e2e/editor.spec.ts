@@ -65,7 +65,7 @@ test('recovery survives reload without replacing the model automatically', async
   await page.reload();
   await expect(page.locator('#recovery-status')).toContainText('1');
   await page.locator('#recovery-status').click();
-  await page.locator('#tool-panel-body').getByRole('button', { name: '復元', exact: true }).click();
+  await page.locator('#tool-panel-body').getByRole('button', { name: /^復元/ }).click();
   await expect(page.locator('input[data-column-key="number"]').first()).toHaveValue('1');
 });
 
@@ -188,7 +188,7 @@ test('two tabs retain independent recovery candidates', async ({ page }) => {
   await expect(other.locator('#recovery-status')).toHaveAttribute('data-state', 'saved');
   await page.locator('#recovery-status').click();
   await expect(
-    page.locator('#tool-panel-body').getByRole('button', { name: '復元', exact: true }),
+    page.locator('#tool-panel-body').getByRole('button', { name: /^復元/ }),
   ).toHaveCount(2);
   await other.close();
 });

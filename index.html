@@ -16,7 +16,7 @@
         <button id="menu-open" type="button" data-i18n="menu.open"></button>
         <button id="menu-save" type="button" data-i18n="menu.save"></button>
         <button id="menu-export-yaml" type="button" data-i18n="menu.exportYaml"></button>
-        <button id="menu-import-csv" type="button">CSV入力 / Import CSV</button>
+        <button id="menu-import-csv" type="button" data-i18n="menu.importCsv"></button>
         <button id="menu-export-csv" type="button" data-i18n="menu.exportCsv"></button>
         <span class="separator" aria-hidden="true"></span>
         <button id="menu-sample" type="button" data-i18n="menu.sample"></button>
@@ -36,7 +36,7 @@
         <button id="menu-show-node-num" type="button" data-i18n="menu.showNodeNum"></button>
         <button id="menu-show-member-num" type="button" data-i18n="menu.showMemberNum"></button>
         <button id="menu-show-wall-num" type="button" data-i18n="menu.showWallNum"></button>
-        <button id="menu-local-axes" type="button">局所軸 / Local axes</button>
+        <button id="menu-local-axes" type="button" data-i18n="menu.localAxes" aria-pressed="false"></button>
         <button id="menu-toggle-loads" type="button" data-i18n="view.loads"></button>
         <button id="menu-toggle-boundaries" type="button" data-i18n="view.boundaries"></button>
       </div>
@@ -51,9 +51,9 @@
         <button id="menu-sort" type="button" data-i18n="menu.sort"></button>
         <button id="menu-renumber" type="button" data-i18n="menu.renumber"></button>
         <button id="menu-merge" type="button" data-i18n="menu.merge"></button>
-        <button id="menu-pattern" type="button">配列複製 / Pattern copy</button>
-        <button id="menu-frame-template" type="button">骨組生成 / Frame template</button>
-        <button id="menu-bulk-attribute" type="button">一括属性変更 / Bulk edit</button>
+        <button id="menu-pattern" type="button" data-i18n="menu.pattern"></button>
+        <button id="menu-frame-template" type="button" data-i18n="menu.frameTemplate"></button>
+        <button id="menu-bulk-attribute" type="button" data-i18n="menu.bulkAttribute"></button>
         <button id="menu-duplicate" type="button" data-i18n="edit.duplicate"></button>
       </div>
     </details>
@@ -78,7 +78,7 @@
       <div class="menu-dropdown">
         <button id="menu-validate" type="button" data-i18n="tools.validate"></button>
         <button id="menu-model-info" type="button" data-i18n="tools.modelInfo"></button>
-        <button id="menu-presets" type="button">テンプレート・ビュー / Presets</button>
+        <button id="menu-presets" type="button" data-i18n="menu.presets"></button>
         <button id="menu-section-calculator" type="button" data-i18n="tools.sectionCalculator"></button>
         <button id="menu-import-report" type="button" data-i18n="tools.importReport"></button>
         <button id="menu-results" type="button" data-i18n="tools.results"></button>
@@ -87,9 +87,10 @@
 
     <div id="menu-right">
       <span id="dirty-indicator" class="hidden" data-i18n="status.unsaved"></span>
-      <button id="btn-theme" type="button" title="Theme"></button>
-      <button id="btn-lang" type="button" title="Language"></button>
-      <button id="btn-help" type="button" title="Help" aria-haspopup="dialog">?</button>
+      <button id="btn-maximize-view" type="button" data-i18n-title="layout.maximizeView" aria-pressed="false">⤢</button>
+      <button id="btn-theme" type="button" data-i18n-title="menu.theme"></button>
+      <button id="btn-lang" type="button" data-i18n-title="menu.language"></button>
+      <button id="btn-help" type="button" data-i18n-title="menu.help" aria-haspopup="dialog">?</button>
     </div>
   </header>
 
@@ -116,11 +117,19 @@
       </nav>
 
       <div id="drawing-hint" class="viewer-hint hidden" role="status"></div>
+      <aside id="drawing-panel" class="hidden" aria-labelledby="drawing-panel-title">
+        <div class="panel-header">
+          <span id="drawing-panel-title" data-i18n="draw.settings"></span>
+          <button id="drawing-panel-close" type="button" data-i18n-aria="draw.closeSettings">&times;</button>
+        </div>
+        <div id="drawing-panel-body"></div>
+      </aside>
 
       <aside id="selection-info-panel" class="hidden" aria-labelledby="selection-info-title">
         <div id="selection-info-header">
           <span id="selection-info-title"></span>
-          <button id="selection-info-close" type="button" data-i18n-aria="selection.close">&times;</button>
+          <button id="selection-info-clear" type="button" class="secondary" data-i18n="selection.clear"></button>
+          <button id="selection-info-close" type="button" data-i18n-aria="selection.closeInfo">&times;</button>
         </div>
         <div id="selection-info-body"></div>
       </aside>
@@ -128,7 +137,11 @@
       <aside id="tool-panel" class="hidden" aria-labelledby="tool-panel-title">
         <div class="panel-header">
           <span id="tool-panel-title"></span>
-          <button id="tool-panel-close" type="button" data-i18n-aria="selection.close">&times;</button>
+          <span class="panel-header-actions">
+            <button id="tool-panel-collapse" type="button" class="icon-button" data-i18n-title="panel.collapse" aria-expanded="true"></button>
+            <button id="tool-panel-dock" type="button" class="icon-button" data-i18n-title="panel.dock" aria-pressed="false"></button>
+            <button id="tool-panel-close" type="button" data-i18n-aria="panel.close">&times;</button>
+          </span>
         </div>
         <div id="tool-panel-body"></div>
       </aside>
@@ -137,7 +150,13 @@
     <button id="resize-handle" type="button" data-i18n-aria="aria.resizeData" aria-orientation="vertical"></button>
 
     <section id="data-panel" data-i18n-aria="aria.modelData">
-      <div id="tab-bar" role="tablist" data-i18n-aria="aria.dataCategories"></div>
+      <div id="tab-nav">
+        <button id="tab-scroll-prev" type="button" class="tab-scroll" data-i18n-title="tabs.scrollPrev">‹</button>
+        <div id="tab-bar" role="tablist" data-i18n-aria="aria.dataCategories"></div>
+        <button id="tab-scroll-next" type="button" class="tab-scroll" data-i18n-title="tabs.scrollNext">›</button>
+        <label class="tab-select-box"><span class="sr-only" data-i18n="tabs.list"></span><select id="tab-select" data-i18n-title="tabs.list"></select></label>
+        <button id="btn-maximize-data" type="button" class="tab-scroll" data-i18n-title="layout.maximizeData" aria-pressed="false">⤢</button>
+      </div>
       <div id="grid-toolbar">
         <span id="toolbar-label" data-i18n="toolbar.dataEdit"></span>
         <label class="search-box">
@@ -147,6 +166,7 @@
         <button id="btn-copy-grid" class="toolbar-btn secondary" type="button" data-i18n="toolbar.copy"></button>
         <button id="btn-paste-grid" class="toolbar-btn secondary" type="button" data-i18n="toolbar.paste"></button>
       </div>
+      <div id="grid-filter-state" role="status" aria-live="polite"></div>
       <div id="grid-container" role="tabpanel"></div>
     </section>
   </main>

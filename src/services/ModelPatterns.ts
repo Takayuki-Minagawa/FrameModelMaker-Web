@@ -62,11 +62,8 @@ function transformSupports(boundary: BoundaryCondition, matrix: Matrix3): void {
 }
 
 /** Call within EditorController.execute; unsupported semantics are rejected before copying. */
-export function replicatePattern(
-  doc: FrameDocument,
-  selection: PatternSelection,
-  pattern: Pattern,
-): PatternSelection {
+/** Validates a pattern definition and returns the number of copies it produces. */
+export function validatePattern(pattern: Pattern): number {
   const count = pattern.kind === 'mirror' ? 1 : pattern.count;
   if (!Number.isInteger(count) || count < 1 || count > 1000) throw new Error('Copy count must be 1–1000.');
   const values =
@@ -77,6 +74,99 @@ export function replicatePattern(
         : [pattern.offset];
   if (!values.every(Number.isFinite)) throw new Error('Pattern coordinates must be finite.');
   if (pattern.kind !== 'linear' && !['x', 'y', 'z'].includes(pattern.axis)) throw new Error('Invalid axis.');
+  return count;
+}
+
+/** Rejections shared by the preview and the copy, so a preview never reports a copy that will fail. */
+export const PATTERN_UNSUPPORTED_METADATA =
+  'This model contains constraints, masses, links or opaque analysis data. Pattern copying requires an explicit adapter for these records.';
+export const PATTERN_UNSUPPORTED_TRANSFORM =
+  'Rotating/mirroring member loads, CMQ values or wall parameters has no defined convention. Use linear copies.';
+
+function assertPatternSupported(
+  doc: FrameDocument,
+  pattern: Pattern,
+  members: ReadonlyArray<FrameDocument['members'][number]>,
+  walls: ReadonlyArray<Wall>,
+): void {
+  const metadata = doc.analysisMetadata;
+  if (
+    metadata &&
+    (metadata.constraints.length ||
+      metadata.nodalMasses.length ||
+      metadata.linkElements.length ||
+      metadata.resultExtraction ||
+      metadata.extensions)
+  )
+    throw new Error(PATTERN_UNSUPPORTED_METADATA);
+  if (
+    pattern.kind !== 'linear' &&
+    (members.some(
+      (member) =>
+        member.memberLoads.some((load) => !load.isZero) || member.cmqLoads.some((load) => !load.isZero),
+    ) ||
+      walls.length)
+  )
+    throw new Error(PATTERN_UNSUPPORTED_TRANSFORM);
+}
+
+export interface PatternPreview {
+  copies: number;
+  /** Entities that will be copied (members and walls pull in their nodes). */
+  sourceNodeNumbers: number[];
+  sourceMemberNumbers: number[];
+  sourceWallNumbers: number[];
+  addedNodeCount: number;
+  addedMemberCount: number;
+  addedWallCount: number;
+  /** Coordinates of the first copy for each source node (cm). */
+  firstCopyPositions: Array<{ sourceNodeNumber: number; position: Tuple }>;
+}
+
+/** Computes what `replicatePattern` would add without mutating the document. */
+export function previewPattern(
+  doc: FrameDocument,
+  selection: PatternSelection,
+  pattern: Pattern,
+): PatternPreview {
+  const copies = validatePattern(pattern);
+  const memberNumbers = new Set(selection.members);
+  const wallNumbers = new Set(selection.walls);
+  const members = doc.members.filter((item) => memberNumbers.has(item.number));
+  const walls = doc.walls.filter((item) => wallNumbers.has(item.number));
+  const nodeNumbers = [
+    ...new Set([
+      ...selection.nodes,
+      ...members.flatMap((item) => [item.iNodeNumber, item.jNodeNumber]),
+      ...walls.flatMap((item) => [item.leftBottomNode, item.rightBottomNode, item.leftTopNode, item.rightTopNode]),
+    ]),
+  ];
+  const nodes = nodeNumbers.map((number) => doc.findNodeByNumber(number));
+  if (members.length !== memberNumbers.size || walls.length !== wallNumbers.size || nodes.some((node) => !node) || !nodes.length)
+    throw new Error('Invalid or empty selection.');
+  assertPatternSupported(doc, pattern, members, walls);
+  const { matrix, offset } = transform(pattern, 1);
+  return {
+    copies,
+    sourceNodeNumbers: nodeNumbers,
+    sourceMemberNumbers: members.map((item) => item.number),
+    sourceWallNumbers: walls.map((item) => item.number),
+    addedNodeCount: nodes.length * copies,
+    addedMemberCount: members.length * copies,
+    addedWallCount: walls.length * copies,
+    firstCopyPositions: nodes.map((node) => ({
+      sourceNodeNumber: node!.number,
+      position: new Vector3(node!.x, node!.y, node!.z).applyMatrix3(matrix).add(offset).toArray() as Tuple,
+    })),
+  };
+}
+
+export function replicatePattern(
+  doc: FrameDocument,
+  selection: PatternSelection,
+  pattern: Pattern,
+): PatternSelection {
+  const count = validatePattern(pattern);
   const memberNumbers = new Set(selection.members);
   const wallNumbers = new Set(selection.walls);
   const members = doc.members.filter((item) => memberNumbers.has(item.number));
@@ -111,30 +201,7 @@ export function replicatePattern(
       groups: [],
     };
   const metadata = doc.analysisMetadata;
-  if (
-    metadata &&
-    (metadata.constraints.length ||
-      metadata.nodalMasses.length ||
-      metadata.linkElements.length ||
-      metadata.resultExtraction ||
-      metadata.extensions)
-  ) {
-    throw new Error(
-      'This model contains constraints, masses, links or opaque analysis data. Pattern copying requires an explicit adapter for these records.',
-    );
-  }
-  if (
-    pattern.kind !== 'linear' &&
-    (members.some(
-      (member) =>
-        member.memberLoads.some((load) => !load.isZero) || member.cmqLoads.some((load) => !load.isZero),
-    ) ||
-      walls.length)
-  ) {
-    throw new Error(
-      'Rotating/mirroring member loads, CMQ values or wall parameters has no defined convention. Use linear copies.',
-    );
-  }
+  assertPatternSupported(doc, pattern, members, walls);
   const originalBoundaries = doc.boundaries.filter((boundary) => nodeNumbers.has(boundary.nodeNumber));
   const transforms = Array.from({ length: count }, (_, i) => transform(pattern, i + 1));
   // Validate all rotations of supports before changing the document.

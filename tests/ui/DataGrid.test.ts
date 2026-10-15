@@ -222,3 +222,26 @@ describe('DataGrid', () => {
     expect((document.activeElement as HTMLElement).dataset.rowIndex).toBe('2');
   });
 });
+
+describe('DataGrid editing state across focus changes (review fix)', () => {
+  it('keeps uncommitted text in editing mode when the window, not the editor, loses focus', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const rows = [{ id: 1, name: 'Alpha', enabled: true, kind: 1 }];
+    const grid = new DataGrid(container, [{ key: 'name', type: 'text' }], rows);
+    const editor = container.querySelector<HTMLInputElement>('.data-grid-editor')!;
+    editor.focus();
+    editor.value = 'Alp';
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(grid.isEditing()).toBe(true);
+    // Window blur: focusout fires but the editor remains the active element.
+    editor.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    expect(grid.isEditing()).toBe(true);
+    // Real blur to another control: navigation mode again.
+    const other = document.createElement('button');
+    document.body.appendChild(other);
+    other.focus();
+    expect(grid.isEditing()).toBe(false);
+    grid.destroy();
+  });
+});

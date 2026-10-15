@@ -42,6 +42,8 @@ export interface ColumnDef<T extends object> {
   readOnly?: boolean;
   required?: boolean;
   unit?: string;
+  /** Meaning, unit, sign convention or example shown as header tooltip / aria-description. */
+  description?: string;
   min?: number;
   max?: number;
   step?: number | 'any';

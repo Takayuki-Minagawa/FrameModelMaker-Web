@@ -121,6 +121,16 @@ export class DataGrid<T extends object> {
     this.render();
   }
 
+  /**
+   * True while a cell editor accepts free text (typing, F2, or click on the
+   * editor). After Enter/Tab commits a value the grid is back in navigation
+   * mode even though the editor keeps focus, so application shortcuts such as
+   * Undo/Redo apply to the model rather than to the text field.
+   */
+  isEditing(): boolean {
+    return this.editing;
+  }
+
   getColumns(): readonly ColumnDef<T>[] {
     return this.columns;
   }
@@ -507,6 +517,10 @@ export class DataGrid<T extends object> {
         direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none',
       );
       th.setAttribute('aria-label', `${label}${unit}; activate to sort`);
+      if (column.description) {
+        th.title = column.description;
+        th.setAttribute('aria-description', column.description);
+      }
       if (column.width) th.style.width = column.width;
       headerRow.appendChild(th);
     }
@@ -580,6 +594,9 @@ export class DataGrid<T extends object> {
     this.table.removeEventListener('change', this.changeHandler);
     this.table.removeEventListener('click', this.clickHandler);
     this.table.removeEventListener('keydown', this.keydownHandler);
+    this.table.removeEventListener('input', this.textInputHandler);
+    this.table.removeEventListener('compositionstart', this.textInputHandler);
+    this.table.removeEventListener('focusout', this.focusOutHandler);
     this.table.removeEventListener('copy', this.copyHandler);
     this.table.removeEventListener('paste', this.pasteHandler);
     this.destroyed = true;
@@ -706,6 +723,27 @@ export class DataGrid<T extends object> {
     this.moveCellFocus(current, rowDelta, columnDelta, absoluteColumn, event.shiftKey && event.key !== 'Tab');
   };
 
+  /**
+   * IME composition and Backspace/Delete do not pass through the printable-key
+   * branch of the keydown handler, so mark the cell as being edited whenever a
+   * text editor actually receives input.
+   */
+  private readonly textInputHandler = (event: Event): void => {
+    const editor = this.getEditor(event.target);
+    if (editor instanceof HTMLInputElement && editor.type !== 'checkbox') this.editing = true;
+  };
+
+  /**
+   * Leaving an editor (commit by blur) returns the grid to navigation mode. When
+   * the whole window loses focus the editor stays the active element and no
+   * `change` fires, so the uncommitted text must keep its editing state.
+   */
+  private readonly focusOutHandler = (event: FocusEvent): void => {
+    if (!this.getEditor(event.target)) return;
+    if (document.activeElement === event.target) return;
+    this.editing = false;
+  };
+
   private readonly copyHandler = (event: ClipboardEvent): void => {
     if (!event.clipboardData) return;
     if (this.editing && this.getEditor(event.target)) return;
@@ -731,6 +769,9 @@ export class DataGrid<T extends object> {
     this.table.addEventListener('change', this.changeHandler);
     this.table.addEventListener('click', this.clickHandler);
     this.table.addEventListener('keydown', this.keydownHandler);
+    this.table.addEventListener('input', this.textInputHandler);
+    this.table.addEventListener('compositionstart', this.textInputHandler);
+    this.table.addEventListener('focusout', this.focusOutHandler);
     this.table.addEventListener('copy', this.copyHandler);
     this.table.addEventListener('paste', this.pasteHandler);
   }
@@ -793,6 +834,7 @@ export class DataGrid<T extends object> {
     editor.dataset.columnIndex = String(columnIndex);
     editor.dataset.columnKey = column.key;
     editor.setAttribute('aria-label', `${column.header ?? column.key}, row ${rowIndex + 1}`);
+    if (column.description) editor.title = column.description;
     return editor;
   }
 
