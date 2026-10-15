@@ -17,6 +17,8 @@ import type { ModelViewer } from '../../src/viewer/ModelViewer';
 import { FakeModelViewer } from './support/FakeModelViewer';
 import { click, installDomPolyfills, mountPanelMarkup, press, setValue } from './support/dom';
 
+let lastSetup: { history: DocumentHistory; toolPanel: ToolPanel } | null = null;
+
 function setup() {
   installDomPolyfills();
   mountPanelMarkup();
@@ -59,6 +61,7 @@ function setup() {
     toolPanel.notifyModelChanged();
     return section;
   };
+  lastSetup = { history, toolPanel };
   return { doc, toolPanel, show, body, control, addSection, notifications, defaultSectionCreated: () => defaultSectionCreated };
 }
 
@@ -167,6 +170,25 @@ describe('SectionCalculatorPanel (R03 / R04)', () => {
     await click(document.getElementById('section-calculator-apply')!);
     expect(chosen.p1_A).toBe(600);
     expect(other.p1_A).toBe(0);
+  });
+
+  it('keeps the target after undo rebuilds the section objects (review fix)', async () => {
+    const { doc, show, control, addSection } = setup();
+    addSection(1, 'A');
+    addSection(2, 'B');
+    show();
+    const target = () => control('target-section') as HTMLSelectElement;
+    setValue(target(), '2');
+    setValue(control('dimension-1'), '20');
+    setValue(control('dimension-2'), '30');
+    await click(document.getElementById('section-calculator-apply')!);
+    expect(doc.findSectionByNumber(2)!.p1_A).toBe(600);
+    const { history, toolPanel } = lastSetup!;
+    history.undo();
+    toolPanel.notifyModelChanged();
+    expect(doc.findSectionByNumber(2)!.p1_A).toBe(0);
+    expect(target().value).toBe('2');
+    expect((document.getElementById('section-calculator-apply') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('localizes service validation messages', () => {

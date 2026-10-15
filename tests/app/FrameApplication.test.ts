@@ -28,8 +28,9 @@ describe('FrameApplication integration (CUA regression)', () => {
     expect(doc.nodes).toHaveLength(1);
     expect(statusKind()).toBe('success');
     const x = gridInput(0, 'x');
-    x.click();
+    // Browsers move focus on mousedown, before the click event.
     x.focus();
+    x.click();
     x.value = '12.5';
     key(x, { key: 'Enter' });
     await flush();
@@ -143,6 +144,7 @@ describe('FrameApplication integration (CUA regression)', () => {
     expect(doc.nodes).toHaveLength(2);
     expect(nodesRow()).toBe('2');
     const x = gridInput(1, 'x');
+    x.focus();
     x.click();
     x.value = '100';
     key(x, { key: 'Enter' });

@@ -596,6 +596,7 @@ export class DataGrid<T extends object> {
     this.table.removeEventListener('keydown', this.keydownHandler);
     this.table.removeEventListener('input', this.textInputHandler);
     this.table.removeEventListener('compositionstart', this.textInputHandler);
+    this.table.removeEventListener('focusout', this.focusOutHandler);
     this.table.removeEventListener('copy', this.copyHandler);
     this.table.removeEventListener('paste', this.pasteHandler);
     this.destroyed = true;
@@ -732,6 +733,11 @@ export class DataGrid<T extends object> {
     if (editor instanceof HTMLInputElement && editor.type !== 'checkbox') this.editing = true;
   };
 
+  /** Leaving an editor (commit by blur) returns the grid to navigation mode. */
+  private readonly focusOutHandler = (event: FocusEvent): void => {
+    if (this.getEditor(event.target)) this.editing = false;
+  };
+
   private readonly copyHandler = (event: ClipboardEvent): void => {
     if (!event.clipboardData) return;
     if (this.editing && this.getEditor(event.target)) return;
@@ -759,6 +765,7 @@ export class DataGrid<T extends object> {
     this.table.addEventListener('keydown', this.keydownHandler);
     this.table.addEventListener('input', this.textInputHandler);
     this.table.addEventListener('compositionstart', this.textInputHandler);
+    this.table.addEventListener('focusout', this.focusOutHandler);
     this.table.addEventListener('copy', this.copyHandler);
     this.table.addEventListener('paste', this.pasteHandler);
   }

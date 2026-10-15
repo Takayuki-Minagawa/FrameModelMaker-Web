@@ -251,7 +251,10 @@ export function createSectionCalculator(context: {
 
     // The chosen target is tracked by identity so renumbering (Edit → Renumber,
     // number change) keeps pointing at the same section rather than its old number.
+    // Undo/redo and file loads rebuild Section objects, so fall back to the stored
+    // number when the object itself is gone.
     let selectedSection: Section | null = null;
+    let selectedNumber: number | null = null;
     const refreshTargets = (): void => {
       sectionSelect.replaceChildren();
       const placeholder = document.createElement('option');
@@ -264,13 +267,16 @@ export function createSectionCalculator(context: {
         item.textContent = `${section.number}: ${section.comment || '-'}`;
         sectionSelect.appendChild(item);
       }
-      if (selectedSection && !doc.sections.includes(selectedSection)) selectedSection = null;
+      if (selectedSection && !doc.sections.includes(selectedSection))
+        selectedSection = selectedNumber === null ? null : doc.findSectionByNumber(selectedNumber) ?? null;
+      selectedNumber = selectedSection?.number ?? null;
       sectionSelect.value = selectedSection ? String(selectedSection.number) : '';
       applyButton.disabled = sectionSelect.value === '';
       sectionSelect.dataset.count = String(doc.sections.length);
     };
     sectionSelect.addEventListener('change', () => {
       selectedSection = doc.findSectionByNumber(Number(sectionSelect.value)) ?? null;
+      selectedNumber = selectedSection?.number ?? null;
       applyButton.disabled = sectionSelect.value === '';
     });
     refreshTargets();
