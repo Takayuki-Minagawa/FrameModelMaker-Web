@@ -191,6 +191,30 @@ describe('SectionCalculatorPanel (R03 / R04)', () => {
     expect((document.getElementById('section-calculator-apply') as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it('clears the target instead of switching sections after Renumber then Undo (review fix)', () => {
+    const { doc, show, control, addSection } = setup();
+    addSection(1, 'A');
+    addSection(3, 'B');
+    addSection(5, 'C');
+    show();
+    const target = () => control('target-section') as HTMLSelectElement;
+    setValue(target(), '5');
+    const { history, toolPanel } = lastSetup!;
+    history.capture('before renumber');
+    doc.assignNumbers();
+    history.capture('Renumber');
+    toolPanel.notifyModelChanged();
+    expect(target().value).toBe('3');
+    expect(doc.findSectionByNumber(3)!.comment).toBe('C');
+    history.undo();
+    toolPanel.notifyModelChanged();
+    // Section "C" is number 5 again; number 3 now belongs to "B", which the user never chose.
+    // The rebuilt section at the same position is "C" (number 5 again), so the key no longer matches.
+    expect(doc.sections.map((section) => `${section.number}:${section.comment}`)).toEqual(['1:A', '3:B', '5:C']);
+    expect(target().value).toBe('');
+    expect((document.getElementById('section-calculator-apply') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('localizes service validation messages', () => {
     expect(localizeSectionError(new Error('thickness leaves no hollow core.'))).toContain('中空部');
     expect(localizeSectionError(new Error('width must be a finite positive number.'))).toBe('幅は正の有限値を入力してください。');

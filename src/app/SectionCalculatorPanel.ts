@@ -251,10 +251,17 @@ export function createSectionCalculator(context: {
 
     // The chosen target is tracked by identity so renumbering (Edit → Renumber,
     // number change) keeps pointing at the same section rather than its old number.
-    // Undo/redo and file loads rebuild Section objects, so fall back to the stored
-    // number when the object itself is gone.
+    // Undo/redo and file loads rebuild Section objects. When the object is gone,
+    // accept a rebuilt section only if number, list position and comment all
+    // still match; otherwise clear the target rather than risk the wrong one
+    // (e.g. Renumber followed by Undo shifts numbers between sections).
     let selectedSection: Section | null = null;
-    let selectedNumber: number | null = null;
+    let selectedKey: { number: number; index: number; comment: string } | null = null;
+    const rememberSelection = (): void => {
+      selectedKey = selectedSection
+        ? { number: selectedSection.number, index: doc.sections.indexOf(selectedSection), comment: selectedSection.comment }
+        : null;
+    };
     const refreshTargets = (): void => {
       sectionSelect.replaceChildren();
       const placeholder = document.createElement('option');
@@ -267,16 +274,21 @@ export function createSectionCalculator(context: {
         item.textContent = `${section.number}: ${section.comment || '-'}`;
         sectionSelect.appendChild(item);
       }
-      if (selectedSection && !doc.sections.includes(selectedSection))
-        selectedSection = selectedNumber === null ? null : doc.findSectionByNumber(selectedNumber) ?? null;
-      selectedNumber = selectedSection?.number ?? null;
+      if (selectedSection && !doc.sections.includes(selectedSection)) {
+        const candidate = selectedKey ? doc.sections[selectedKey.index] : undefined;
+        selectedSection =
+          candidate && candidate.number === selectedKey!.number && candidate.comment === selectedKey!.comment
+            ? candidate
+            : null;
+      }
+      rememberSelection();
       sectionSelect.value = selectedSection ? String(selectedSection.number) : '';
       applyButton.disabled = sectionSelect.value === '';
       sectionSelect.dataset.count = String(doc.sections.length);
     };
     sectionSelect.addEventListener('change', () => {
       selectedSection = doc.findSectionByNumber(Number(sectionSelect.value)) ?? null;
-      selectedNumber = selectedSection?.number ?? null;
+      rememberSelection();
       applyButton.disabled = sectionSelect.value === '';
     });
     refreshTargets();

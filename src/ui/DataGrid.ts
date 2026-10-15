@@ -733,9 +733,15 @@ export class DataGrid<T extends object> {
     if (editor instanceof HTMLInputElement && editor.type !== 'checkbox') this.editing = true;
   };
 
-  /** Leaving an editor (commit by blur) returns the grid to navigation mode. */
+  /**
+   * Leaving an editor (commit by blur) returns the grid to navigation mode. When
+   * the whole window loses focus the editor stays the active element and no
+   * `change` fires, so the uncommitted text must keep its editing state.
+   */
   private readonly focusOutHandler = (event: FocusEvent): void => {
-    if (this.getEditor(event.target)) this.editing = false;
+    if (!this.getEditor(event.target)) return;
+    if (document.activeElement === event.target) return;
+    this.editing = false;
   };
 
   private readonly copyHandler = (event: ClipboardEvent): void => {
