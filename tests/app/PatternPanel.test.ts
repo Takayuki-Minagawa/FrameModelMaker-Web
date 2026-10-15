@@ -3,7 +3,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DialogService } from '../../src/app/DialogService';
 import { EditorController } from '../../src/app/EditorController';
-import { patternFromAnswer, showFrameTemplateDialog, showPatternDialog } from '../../src/app/PatternPanel';
+import {
+  localizePatternError,
+  patternFromAnswer,
+  showFrameTemplateDialog,
+  showPatternDialog,
+} from '../../src/app/PatternPanel';
 import { FrameDocument } from '../../src/models/FrameDocument';
 import { Section } from '../../src/models/Section';
 import { DocumentHistory } from '../../src/services/DocumentHistory';
@@ -92,6 +97,27 @@ describe('Pattern dialog (R05 / R11)', () => {
     await pending;
     expect(doc.nodes).toHaveLength(1);
     expect(notifications.at(-1)![0]).toBe('cancel');
+  });
+
+  it('marks an unsupported radial copy invalid in the preview with a localized reason (review fix)', async () => {
+    const { doc, dialogService, mutate, notify } = setup();
+    const a = doc.addNode(doc.createNode(0, 0, 0));
+    const b = doc.addNode(doc.createNode(100, 0, 0));
+    const member = doc.createMember();
+    member.iNodeNumber = a.number;
+    member.jNodeNumber = b.number;
+    member.sectionNumber = 1;
+    doc.addMember(member);
+    member.memberLoads[0].p1 = 1;
+    const pending = showPatternDialog(doc, { nodes: [], members: [member.number], walls: [] }, dialogService, mutate, notify as never);
+    await flush();
+    setDialogValue('kind', 'radial');
+    const preview = dialog().querySelector<HTMLElement>('#pattern-preview')!;
+    expect(preview.dataset.valid).toBe('false');
+    expect(preview.textContent).toContain('回転・鏡映できません');
+    await cancelDialog();
+    await pending;
+    expect(localizePatternError(new Error('Invalid or empty selection.'))).toContain('選択してください');
   });
 
   it('maps radial answers to origin coordinates', () => {

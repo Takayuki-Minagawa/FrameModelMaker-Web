@@ -1,6 +1,8 @@
 import type { FrameDocument } from '../models/FrameDocument';
 import {
   generateFrame,
+  PATTERN_UNSUPPORTED_METADATA,
+  PATTERN_UNSUPPORTED_TRANSFORM,
   previewPattern,
   replicatePattern,
   type Pattern,
@@ -25,6 +27,27 @@ export function patternFromAnswer(answer: Record<string, string>): Pattern {
           origin: xyz,
         }
       : { kind: 'mirror', axis, offset: Number(answer.offset) };
+}
+
+/** Translates the pattern service's (English) rejection messages for the UI. */
+export function localizePatternError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const known: Record<string, [string, string]> = {
+    [PATTERN_UNSUPPORTED_METADATA]: [
+      '拘束・質量・リンク・不透明な解析データを含むモデルは配列複製できません。',
+      'Models with constraints, masses, links or opaque analysis data cannot be pattern-copied.',
+    ],
+    [PATTERN_UNSUPPORTED_TRANSFORM]: [
+      '部材荷重・CMQ・壁を含む選択は回転・鏡映できません（規約が未定義）。直線複製を使ってください。',
+      'Selections with member loads, CMQ values or walls cannot be rotated or mirrored (no defined convention). Use linear copies.',
+    ],
+    'Copy count must be 1–1000.': ['複製数は1〜1000の整数にしてください。', 'Copy count must be an integer 1–1000.'],
+    'Pattern coordinates must be finite.': ['座標・角度は有限の数値にしてください。', 'Coordinates and angles must be finite numbers.'],
+    'Invalid or empty selection.': ['複製する節点・部材・壁を選択してください。', 'Select nodes, members or walls to copy.'],
+    'Invalid axis.': ['軸を選択してください。', 'Choose an axis.'],
+  };
+  const localized = known[message];
+  return localized ? localText(...localized) : message;
 }
 
 function formatPoint(position: [number, number, number]): string {
@@ -77,7 +100,7 @@ export function renderPatternPreview(
     container.dataset.valid = 'true';
   } catch (error) {
     container.dataset.valid = 'false';
-    container.append(createElement('p', 'diagnostic-item error', error instanceof Error ? error.message : String(error)));
+    container.append(createElement('p', 'diagnostic-item error', localizePatternError(error)));
   }
   return container;
 }
@@ -185,7 +208,12 @@ export async function showPatternDialog(
     y: answer.kind === 'radial' ? answer.oy : answer.y,
     z: answer.kind === 'radial' ? answer.oz : answer.z,
   });
-  const result = mutate('Replicate pattern', () => replicatePattern(doc, selection, pattern));
+  let result: PatternSelection;
+  try {
+    result = mutate('Replicate pattern', () => replicatePattern(doc, selection, pattern));
+  } catch (error) {
+    throw new Error(localizePatternError(error));
+  }
   notify(
     'success',
     localText(

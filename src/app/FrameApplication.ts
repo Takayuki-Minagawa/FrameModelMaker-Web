@@ -183,7 +183,15 @@ export function initialize(): void {
     setActiveLoadCaseIndex,
     notify,
   });
-  drawingPanel = createDrawingPanel({ doc, viewer, notify });
+  drawingPanel = createDrawingPanel({
+    doc,
+    viewer,
+    notify,
+    onExit: () => {
+      byId('drawing-hint').classList.add('hidden');
+      updateViewerToggleStates();
+    },
+  });
   viewer.setOnDrawingCursor((info) => drawingPanel.syncCursor(info));
   on('menu-presets', () => presets.show());
   on('menu-pattern', () => {

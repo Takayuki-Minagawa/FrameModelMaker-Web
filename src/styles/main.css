@@ -976,9 +976,9 @@ select:focus-visible,
 #status-text[data-kind="cancel"]::before { content: "⊘ "; color: var(--warning); }
 #status-text[data-kind="error"] { color: #ffd0d0; }
 
-/* R09: menu labels never wrap; the bar scrolls instead. */
+/* R09: menu labels never wrap. The bar must not become a scroll container,
+   otherwise the absolutely positioned dropdowns are clipped. */
 .menu-item summary { white-space: nowrap; }
-#menu-bar { overflow-x: auto; overflow-y: visible; scrollbar-width: thin; }
 #menu-right { white-space: nowrap; }
 
 /* R09: tab navigation with scroll buttons and a tab list. */

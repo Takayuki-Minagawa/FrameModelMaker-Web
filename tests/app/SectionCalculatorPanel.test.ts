@@ -130,10 +130,10 @@ describe('SectionCalculatorPanel (R03 / R04)', () => {
     doc.changeEntityNumber('section', 1, 7);
     toolPanel.notifyModelChanged();
     expect([...target().options].map((option) => option.value)).toEqual(['', '7']);
-    expect(target().value).toBe('');
-    expect(apply().disabled).toBe(true);
+    // The renumbered section stays selected (tracked by identity, not by number).
+    expect(target().value).toBe('7');
+    expect(apply().disabled).toBe(false);
 
-    setValue(target(), '7');
     setValue(control('dimension-1'), '20');
     setValue(control('dimension-2'), '30');
     await click(apply());
@@ -147,6 +147,26 @@ describe('SectionCalculatorPanel (R03 / R04)', () => {
     toolPanel.notifyModelChanged();
     expect(target().options).toHaveLength(1);
     expect(apply().disabled).toBe(true);
+  });
+
+  it('keeps pointing at the chosen section after a renumber shifts numbers (review fix)', async () => {
+    const { doc, show, control, toolPanel, addSection } = setup();
+    addSection(1, 'A');
+    const chosen = addSection(3, 'B');
+    const other = addSection(5, 'C');
+    show();
+    const target = () => control('target-section') as HTMLSelectElement;
+    setValue(target(), '3');
+    doc.assignNumbers();
+    toolPanel.notifyModelChanged();
+    expect(chosen.number).toBe(2);
+    expect(other.number).toBe(3);
+    expect(target().value).toBe('2');
+    setValue(control('dimension-1'), '20');
+    setValue(control('dimension-2'), '30');
+    await click(document.getElementById('section-calculator-apply')!);
+    expect(chosen.p1_A).toBe(600);
+    expect(other.p1_A).toBe(0);
   });
 
   it('localizes service validation messages', () => {

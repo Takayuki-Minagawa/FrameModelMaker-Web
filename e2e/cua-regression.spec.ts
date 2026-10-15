@@ -154,3 +154,25 @@ test('R16/R17: local axes expose aria-pressed and the info panel separates hide 
   await expect(page.locator('#selection-info-panel')).toBeHidden();
   await expect(page.locator('tr[data-row-index="1"]')).not.toHaveAttribute('aria-selected', 'true');
 });
+
+test('review fix: dropdown menus are not clipped by the menu bar', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('./');
+  for (const [summaryOf, itemId] of [
+    ['menu-new', 'menu-sample'],
+    ['menu-undo', 'menu-duplicate'],
+    ['menu-validate', 'menu-results'],
+  ]) {
+    await page.locator(`#${summaryOf}`).locator('xpath=ancestor::details').locator('summary').click();
+    const item = page.locator(`#${itemId}`);
+    await expect(item).toBeVisible();
+    // The element actually painted at the item's centre must be the item itself.
+    const hit = await item.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) === element;
+    });
+    expect(hit).toBe(true);
+    await page.keyboard.press('Escape');
+    await page.locator(`#${summaryOf}`).locator('xpath=ancestor::details').evaluate((details) => details.removeAttribute('open'));
+  }
+});

@@ -47,6 +47,27 @@ describe('FrameApplication integration (CUA regression)', () => {
     expect(doc.nodes[0].x).toBe(12.5);
   });
 
+  it('R06 review fix: Ctrl/Cmd+Z during IME composition or deletion stays a text undo', async () => {
+    const { doc } = await bootApplication({ lang: 'ja' });
+    await click('btn-add-row');
+    expect(doc.nodes).toHaveLength(1);
+    const cell = gridInput(0, 'x');
+    cell.focus();
+    cell.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    key(cell, { key: 'z', ctrlKey: true });
+    await flush();
+    expect(doc.nodes).toHaveLength(1);
+
+    await click('btn-add-row');
+    const other = gridInput(1, 'x');
+    other.focus();
+    other.value = '';
+    other.dispatchEvent(new Event('input', { bubbles: true }));
+    key(other, { key: 'z', metaKey: true });
+    await flush();
+    expect(doc.nodes).toHaveLength(2);
+  });
+
   it('R07: a later success replaces an earlier error (frame template)', async () => {
     const { doc } = await bootApplication({ lang: 'ja' });
     await menu('menu-frame-template');
@@ -263,5 +284,10 @@ describe('FrameApplication integration (CUA regression)', () => {
     expect(doc.nodes[0].x).toBe(12.5);
     expect(app.getSelection()).toEqual({ kind: 'node', nodeNumber: 1 });
     expect(statusText()).toContain('作図しました');
+    expect(document.getElementById('view-draw-node')!.getAttribute('aria-pressed')).toBe('true');
+    await click(buttonByText(document.getElementById('drawing-panel-body')!, '作図モードを終了'));
+    expect(document.getElementById('view-draw-node')!.getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('drawing-hint')!.classList.contains('hidden')).toBe(true);
+    expect(app.drawingPanel.isOpen()).toBe(false);
   });
 });

@@ -21,6 +21,8 @@ export function createDrawingPanel(context: {
   doc: FrameDocument;
   viewer: ModelViewer;
   notify(kind: 'info' | 'success' | 'error' | 'cancel', message: string): void;
+  /** Ends drawing the same way Escape does (toolbar state, hint). */
+  onExit?(): void;
 }) {
   const { doc, viewer, notify } = context;
   const panel = byId('drawing-panel');
@@ -178,6 +180,7 @@ export function createDrawingPanel(context: {
       () => {
         viewer.setDrawingMode('none');
         hide();
+        context.onExit?.();
         notify('cancel', localText('作図モードを終了しました。', 'Drawing mode ended.'));
       },
       'panel-action secondary',

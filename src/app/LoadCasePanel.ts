@@ -38,6 +38,7 @@ export function createLoadCasePanel(context: LoadCasePanelContext) {
   let editingCaseId: string | null = null;
   let caseForm: {
     target: HTMLElement;
+    targetLabel: HTMLElement;
     name: HTMLInputElement;
     type: HTMLSelectElement;
     memo: HTMLTextAreaElement;
@@ -67,11 +68,19 @@ export function createLoadCasePanel(context: LoadCasePanelContext) {
     const loadCase = editingCase();
     if (!caseForm) return;
     if (!loadCase) {
-      caseForm.target.textContent = localText('編集対象: なし', 'Editing: none');
+      caseForm.targetLabel.textContent = localText('編集対象: なし', 'Editing: none');
       return;
     }
-    caseForm.target.textContent = `${localText('編集対象', 'Editing')}: ${describeLoadCase(doc, loadCase.id)}`;
+    caseForm.targetLabel.textContent = `${localText('編集対象', 'Editing')}: ${describeLoadCase(doc, loadCase.id)}`;
     caseForm.target.dataset.loadCaseId = loadCase.id;
+    // Imported models may use type strings outside LoadCaseType; keep them selectable
+    // so the form neither reports phantom edits nor writes back an empty type.
+    if (![...caseForm.type.options].some((option) => option.value === loadCase.type)) {
+      const item = document.createElement('option');
+      item.value = loadCase.type;
+      item.textContent = loadCase.type;
+      caseForm.type.appendChild(item);
+    }
     caseForm.name.value = loadCase.name;
     caseForm.type.value = loadCase.type;
     caseForm.memo.value = loadCase.memo;
@@ -413,6 +422,9 @@ export function createLoadCasePanel(context: LoadCasePanelContext) {
     form.id = 'load-case-form';
     const target = createElement('p', 'panel-subtitle');
     target.id = 'load-case-edit-target';
+    const targetLabel = createElement('span');
+    targetLabel.id = 'load-case-edit-target-label';
+    target.append(targetLabel);
     const dirtyBadge = createElement('span', 'panel-badge', localText('未確定の編集', 'Unsaved edits'));
     dirtyBadge.classList.add('hidden');
     target.append(dirtyBadge);
@@ -448,14 +460,7 @@ export function createLoadCasePanel(context: LoadCasePanelContext) {
       update,
       revert,
     );
-    caseForm = { target, name, type, memo, dirtyBadge };
-    const typeOption = Array.from(type.options).find((item) => item.value === (editingCase()?.type ?? ''));
-    if (!typeOption && editingCase()) {
-      const item = document.createElement('option');
-      item.value = editingCase()!.type;
-      item.textContent = editingCase()!.type;
-      type.appendChild(item);
-    }
+    caseForm = { target, targetLabel, name, type, memo, dirtyBadge };
     fillCaseForm();
     content.appendChild(form);
     combinationSection = createElement('div');

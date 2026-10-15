@@ -77,6 +77,39 @@ export function validatePattern(pattern: Pattern): number {
   return count;
 }
 
+/** Rejections shared by the preview and the copy, so a preview never reports a copy that will fail. */
+export const PATTERN_UNSUPPORTED_METADATA =
+  'This model contains constraints, masses, links or opaque analysis data. Pattern copying requires an explicit adapter for these records.';
+export const PATTERN_UNSUPPORTED_TRANSFORM =
+  'Rotating/mirroring member loads, CMQ values or wall parameters has no defined convention. Use linear copies.';
+
+function assertPatternSupported(
+  doc: FrameDocument,
+  pattern: Pattern,
+  members: ReadonlyArray<FrameDocument['members'][number]>,
+  walls: ReadonlyArray<Wall>,
+): void {
+  const metadata = doc.analysisMetadata;
+  if (
+    metadata &&
+    (metadata.constraints.length ||
+      metadata.nodalMasses.length ||
+      metadata.linkElements.length ||
+      metadata.resultExtraction ||
+      metadata.extensions)
+  )
+    throw new Error(PATTERN_UNSUPPORTED_METADATA);
+  if (
+    pattern.kind !== 'linear' &&
+    (members.some(
+      (member) =>
+        member.memberLoads.some((load) => !load.isZero) || member.cmqLoads.some((load) => !load.isZero),
+    ) ||
+      walls.length)
+  )
+    throw new Error(PATTERN_UNSUPPORTED_TRANSFORM);
+}
+
 export interface PatternPreview {
   copies: number;
   /** Entities that will be copied (members and walls pull in their nodes). */
@@ -111,6 +144,7 @@ export function previewPattern(
   const nodes = nodeNumbers.map((number) => doc.findNodeByNumber(number));
   if (members.length !== memberNumbers.size || walls.length !== wallNumbers.size || nodes.some((node) => !node) || !nodes.length)
     throw new Error('Invalid or empty selection.');
+  assertPatternSupported(doc, pattern, members, walls);
   const { matrix, offset } = transform(pattern, 1);
   return {
     copies,
@@ -167,30 +201,7 @@ export function replicatePattern(
       groups: [],
     };
   const metadata = doc.analysisMetadata;
-  if (
-    metadata &&
-    (metadata.constraints.length ||
-      metadata.nodalMasses.length ||
-      metadata.linkElements.length ||
-      metadata.resultExtraction ||
-      metadata.extensions)
-  ) {
-    throw new Error(
-      'This model contains constraints, masses, links or opaque analysis data. Pattern copying requires an explicit adapter for these records.',
-    );
-  }
-  if (
-    pattern.kind !== 'linear' &&
-    (members.some(
-      (member) =>
-        member.memberLoads.some((load) => !load.isZero) || member.cmqLoads.some((load) => !load.isZero),
-    ) ||
-      walls.length)
-  ) {
-    throw new Error(
-      'Rotating/mirroring member loads, CMQ values or wall parameters has no defined convention. Use linear copies.',
-    );
-  }
+  assertPatternSupported(doc, pattern, members, walls);
   const originalBoundaries = doc.boundaries.filter((boundary) => nodeNumbers.has(boundary.nodeNumber));
   const transforms = Array.from({ length: count }, (_, i) => transform(pattern, i + 1));
   // Validate all rotations of supports before changing the document.

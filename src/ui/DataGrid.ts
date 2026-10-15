@@ -594,6 +594,8 @@ export class DataGrid<T extends object> {
     this.table.removeEventListener('change', this.changeHandler);
     this.table.removeEventListener('click', this.clickHandler);
     this.table.removeEventListener('keydown', this.keydownHandler);
+    this.table.removeEventListener('input', this.textInputHandler);
+    this.table.removeEventListener('compositionstart', this.textInputHandler);
     this.table.removeEventListener('copy', this.copyHandler);
     this.table.removeEventListener('paste', this.pasteHandler);
     this.destroyed = true;
@@ -720,6 +722,16 @@ export class DataGrid<T extends object> {
     this.moveCellFocus(current, rowDelta, columnDelta, absoluteColumn, event.shiftKey && event.key !== 'Tab');
   };
 
+  /**
+   * IME composition and Backspace/Delete do not pass through the printable-key
+   * branch of the keydown handler, so mark the cell as being edited whenever a
+   * text editor actually receives input.
+   */
+  private readonly textInputHandler = (event: Event): void => {
+    const editor = this.getEditor(event.target);
+    if (editor instanceof HTMLInputElement && editor.type !== 'checkbox') this.editing = true;
+  };
+
   private readonly copyHandler = (event: ClipboardEvent): void => {
     if (!event.clipboardData) return;
     if (this.editing && this.getEditor(event.target)) return;
@@ -745,6 +757,8 @@ export class DataGrid<T extends object> {
     this.table.addEventListener('change', this.changeHandler);
     this.table.addEventListener('click', this.clickHandler);
     this.table.addEventListener('keydown', this.keydownHandler);
+    this.table.addEventListener('input', this.textInputHandler);
+    this.table.addEventListener('compositionstart', this.textInputHandler);
     this.table.addEventListener('copy', this.copyHandler);
     this.table.addEventListener('paste', this.pasteHandler);
   }

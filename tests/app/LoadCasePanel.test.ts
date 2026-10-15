@@ -82,8 +82,13 @@ describe('LoadCasePanel (R01)', () => {
   it('offers save / discard / cancel for unsaved edits when the case switches', async () => {
     const { doc, panel, body, input, activeIndexChanges, notifications } = setup();
     panel.show();
+    const badge = () => body.querySelector<HTMLElement>('#load-case-edit-target .panel-badge');
+    expect(badge()).not.toBeNull();
+    expect(badge()!.classList.contains('hidden')).toBe(true);
     setValue(input('load-case-name'), 'Pending');
     expect(body.querySelector('#load-case-edit-target')!.getAttribute('data-dirty')).toBe('true');
+    expect(badge()!.isConnected).toBe(true);
+    expect(badge()!.classList.contains('hidden')).toBe(false);
 
     doc.loadCaseIndex = 0;
     const switching = panel.onActiveCaseChanged();
@@ -129,6 +134,24 @@ describe('LoadCasePanel (R01)', () => {
     history.undo();
     toolPanel.notifyModelChanged();
     expect(input('load-case-name').value).toBe('Load Case 1');
+  });
+});
+
+describe('LoadCasePanel with imported type strings (review fix)', () => {
+  it('keeps a non-standard type selectable and does not report phantom edits', async () => {
+    const { doc, panel, input } = setup();
+    doc.loadCases[0].type = 'snow';
+    panel.show();
+    doc.loadCaseIndex = 0;
+    await panel.onActiveCaseChanged();
+    expect(input('load-case-type').value).toBe('snow');
+    expect(panel.isCaseFormDirty()).toBe(false);
+    doc.loadCaseIndex = 1;
+    await panel.onActiveCaseChanged();
+    await flush();
+    expect(dialogIsOpen()).toBe(false);
+    expect(panel.getEditingCaseId()).toBe('LC2');
+    expect(doc.loadCases[0].type).toBe('snow');
   });
 });
 

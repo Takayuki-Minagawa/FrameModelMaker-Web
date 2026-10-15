@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { FrameDocument } from '../../src/models/FrameDocument';
 import { Section } from '../../src/models/Section';
-import { generateFrame, previewPattern, replicatePattern, validatePattern } from '../../src/services/ModelPatterns';
+import {
+  generateFrame,
+  PATTERN_UNSUPPORTED_METADATA,
+  PATTERN_UNSUPPORTED_TRANSFORM,
+  previewPattern,
+  replicatePattern,
+  validatePattern,
+} from '../../src/services/ModelPatterns';
 import { writeFrameJson } from '../../src/io/FrameJson';
 
 function model() {
@@ -39,6 +46,26 @@ describe('previewPattern (R11)', () => {
     );
     expect(replicated.nodes).toHaveLength(preview.addedNodeCount);
     expect(replicated.members).toHaveLength(preview.addedMemberCount);
+  });
+
+  it('rejects in the preview what the copy would reject (review fix)', () => {
+    const doc = model();
+    doc.members[0].memberLoads[0].p1 = 1;
+    const selection = { nodes: [], members: [doc.members[0].number], walls: [] };
+    expect(() => previewPattern(doc, selection, { kind: 'mirror', axis: 'x', offset: 0 })).toThrow(PATTERN_UNSUPPORTED_TRANSFORM);
+    expect(() => replicatePattern(doc, selection, { kind: 'mirror', axis: 'x', offset: 0 })).toThrow(PATTERN_UNSUPPORTED_TRANSFORM);
+    expect(previewPattern(doc, selection, { kind: 'linear', count: 1, delta: [10, 0, 0] }).addedMemberCount).toBe(1);
+    doc.analysisMetadata = {
+      sourceFormat: 'framemodelmaker',
+      schemaVersion: '1',
+      units: { length: 'cm', force: 'kN' },
+      constraints: [],
+      nodalMasses: [{ nodeTag: doc.nodes[0].number, mass: [1, 1, 1, 0, 0, 0] } as never],
+      linkElements: [],
+      localAxes: {},
+      groups: [],
+    };
+    expect(() => previewPattern(doc, selection, { kind: 'linear', count: 1, delta: [10, 0, 0] })).toThrow(PATTERN_UNSUPPORTED_METADATA);
   });
 
   it('previews mirror and radial transforms and validates counts', () => {
