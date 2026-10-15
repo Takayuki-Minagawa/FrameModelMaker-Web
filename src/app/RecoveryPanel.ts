@@ -13,7 +13,7 @@ export class RecoveryPanel {
     private readonly history: DocumentHistory,
     private readonly panel: ToolPanel,
     private readonly title: () => string,
-    private readonly restore: (payload: string) => Promise<boolean>,
+    private readonly restore: (payload: string, record: { title: string; updatedAt: number }) => Promise<boolean>,
     private readonly reportError: (error: unknown) => void,
     private readonly exportJson: () => Promise<void>,
   ) {
@@ -36,6 +36,9 @@ export class RecoveryPanel {
       event.returnValue = '';
     });
   }
+
+  /** Optional status sink for completed recovery actions. */
+  reportStatus: (message: string) => void = () => undefined;
 
   renderStatus(): void {
     const status = this.service.status;
@@ -137,23 +140,27 @@ export class RecoveryPanel {
             `${record.title || 'Untitled'} — ${new Date(record.updatedAt).toLocaleString()} (#${record.revision})`,
           ),
         );
-        row.append(
-          createButton(localText('復元', 'Restore'), async () => {
-            if (await this.restore(record.payload)) {
-              this.newModel();
-              this.schedule();
-              this.panel.close();
-            }
-          }),
-          createButton(
-            localText('この候補を削除', 'Delete this snapshot'),
-            async () => {
-              await this.service.remove(record.id);
-              await this.show();
-            },
-            'toolbar-btn toolbar-btn-danger',
-          ),
+        const stamp = `${record.title || 'Untitled'} ${new Date(record.updatedAt).toLocaleString()}`;
+        const restore = createButton(localText('復元', 'Restore'), async () => {
+          if (await this.restore(record.payload, { title: record.title, updatedAt: record.updatedAt })) {
+            this.newModel();
+            this.schedule();
+            this.panel.close();
+          }
+        });
+        restore.setAttribute('aria-label', localText(`復元: ${stamp}`, `Restore: ${stamp}`));
+        const remove = createButton(
+          localText('この候補を削除', 'Delete this snapshot'),
+          async () => {
+            await this.service.remove(record.id);
+            this.reportStatus(localText(`復旧候補「${stamp}」を削除しました。`, `Deleted recovery snapshot “${stamp}”.`));
+            await this.show();
+          },
+          'toolbar-btn toolbar-btn-danger',
         );
+        remove.setAttribute('aria-label', localText(`この候補を削除: ${stamp}`, `Delete this snapshot: ${stamp}`));
+        row.dataset.recordId = record.id;
+        row.append(restore, remove);
         content.append(row);
       }
       if (!records.length)

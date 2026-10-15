@@ -121,6 +121,16 @@ export class DataGrid<T extends object> {
     this.render();
   }
 
+  /**
+   * True while a cell editor accepts free text (typing, F2, or click on the
+   * editor). After Enter/Tab commits a value the grid is back in navigation
+   * mode even though the editor keeps focus, so application shortcuts such as
+   * Undo/Redo apply to the model rather than to the text field.
+   */
+  isEditing(): boolean {
+    return this.editing;
+  }
+
   getColumns(): readonly ColumnDef<T>[] {
     return this.columns;
   }
@@ -507,6 +517,10 @@ export class DataGrid<T extends object> {
         direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none',
       );
       th.setAttribute('aria-label', `${label}${unit}; activate to sort`);
+      if (column.description) {
+        th.title = column.description;
+        th.setAttribute('aria-description', column.description);
+      }
       if (column.width) th.style.width = column.width;
       headerRow.appendChild(th);
     }
@@ -793,6 +807,7 @@ export class DataGrid<T extends object> {
     editor.dataset.columnIndex = String(columnIndex);
     editor.dataset.columnKey = column.key;
     editor.setAttribute('aria-label', `${column.header ?? column.key}, row ${rowIndex + 1}`);
+    if (column.description) editor.title = column.description;
     return editor;
   }
 

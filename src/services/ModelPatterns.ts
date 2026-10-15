@@ -62,11 +62,8 @@ function transformSupports(boundary: BoundaryCondition, matrix: Matrix3): void {
 }
 
 /** Call within EditorController.execute; unsupported semantics are rejected before copying. */
-export function replicatePattern(
-  doc: FrameDocument,
-  selection: PatternSelection,
-  pattern: Pattern,
-): PatternSelection {
+/** Validates a pattern definition and returns the number of copies it produces. */
+export function validatePattern(pattern: Pattern): number {
   const count = pattern.kind === 'mirror' ? 1 : pattern.count;
   if (!Number.isInteger(count) || count < 1 || count > 1000) throw new Error('Copy count must be 1–1000.');
   const values =
@@ -77,6 +74,65 @@ export function replicatePattern(
         : [pattern.offset];
   if (!values.every(Number.isFinite)) throw new Error('Pattern coordinates must be finite.');
   if (pattern.kind !== 'linear' && !['x', 'y', 'z'].includes(pattern.axis)) throw new Error('Invalid axis.');
+  return count;
+}
+
+export interface PatternPreview {
+  copies: number;
+  /** Entities that will be copied (members and walls pull in their nodes). */
+  sourceNodeNumbers: number[];
+  sourceMemberNumbers: number[];
+  sourceWallNumbers: number[];
+  addedNodeCount: number;
+  addedMemberCount: number;
+  addedWallCount: number;
+  /** Coordinates of the first copy for each source node (cm). */
+  firstCopyPositions: Array<{ sourceNodeNumber: number; position: Tuple }>;
+}
+
+/** Computes what `replicatePattern` would add without mutating the document. */
+export function previewPattern(
+  doc: FrameDocument,
+  selection: PatternSelection,
+  pattern: Pattern,
+): PatternPreview {
+  const copies = validatePattern(pattern);
+  const memberNumbers = new Set(selection.members);
+  const wallNumbers = new Set(selection.walls);
+  const members = doc.members.filter((item) => memberNumbers.has(item.number));
+  const walls = doc.walls.filter((item) => wallNumbers.has(item.number));
+  const nodeNumbers = [
+    ...new Set([
+      ...selection.nodes,
+      ...members.flatMap((item) => [item.iNodeNumber, item.jNodeNumber]),
+      ...walls.flatMap((item) => [item.leftBottomNode, item.rightBottomNode, item.leftTopNode, item.rightTopNode]),
+    ]),
+  ];
+  const nodes = nodeNumbers.map((number) => doc.findNodeByNumber(number));
+  if (members.length !== memberNumbers.size || walls.length !== wallNumbers.size || nodes.some((node) => !node) || !nodes.length)
+    throw new Error('Invalid or empty selection.');
+  const { matrix, offset } = transform(pattern, 1);
+  return {
+    copies,
+    sourceNodeNumbers: nodeNumbers,
+    sourceMemberNumbers: members.map((item) => item.number),
+    sourceWallNumbers: walls.map((item) => item.number),
+    addedNodeCount: nodes.length * copies,
+    addedMemberCount: members.length * copies,
+    addedWallCount: walls.length * copies,
+    firstCopyPositions: nodes.map((node) => ({
+      sourceNodeNumber: node!.number,
+      position: new Vector3(node!.x, node!.y, node!.z).applyMatrix3(matrix).add(offset).toArray() as Tuple,
+    })),
+  };
+}
+
+export function replicatePattern(
+  doc: FrameDocument,
+  selection: PatternSelection,
+  pattern: Pattern,
+): PatternSelection {
+  const count = validatePattern(pattern);
   const memberNumbers = new Set(selection.members);
   const wallNumbers = new Set(selection.walls);
   const members = doc.members.filter((item) => memberNumbers.has(item.number));

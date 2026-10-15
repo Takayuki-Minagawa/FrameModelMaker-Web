@@ -140,6 +140,12 @@ export type DrawingEvent =
     }
   | { type: 'cancel' };
 
+export interface DrawingCursorInfo {
+  position: [number, number, number];
+  /** Node the cursor snapped to, when any. */
+  nodeNumber?: number;
+}
+
 export interface DrawingOptions {
   gridSpacing: number;
   snapToGrid: boolean;

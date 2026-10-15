@@ -3,6 +3,7 @@ import { diagnosticDownloads, importPreview } from './ImportPreview';
 import { ImportService } from './ImportService';
 import { RecoveryPanel } from './RecoveryPanel';
 import { createButton, createElement, localText } from './UiHelpers';
+import { renderYamlExportSummary } from './YamlExportSummary';
 
 import { t } from '../i18n';
 import { parseFrameJson, writeFrameJson } from '../io/FrameJson';
@@ -30,6 +31,8 @@ export function createFileOperations(context: {
   updateStatus(message: string): void;
   showValidationPanel(): void;
   selectDiagnosticTarget(kind: string, number?: number): void;
+  /** Clears grid search / filters so a new or loaded model never inherits the previous query. */
+  resetGridFilters?(): void;
 }) {
   const {
     doc,
@@ -61,6 +64,7 @@ export function createFileOperations(context: {
     lastImportDiagnostics = [];
     invalidateAnalysisResults();
     resetViewerSelection();
+    context.resetGridFilters?.();
     refreshDocumentUi(true);
     updateStatus(t('status.newCreated'));
   }
@@ -152,6 +156,7 @@ export function createFileOperations(context: {
     lastImportDiagnostics = diagnostics;
     invalidateAnalysisResults();
     resetViewerSelection();
+    context.resetGridFilters?.();
     refreshDocumentUi(true);
     return true;
   }
@@ -202,20 +207,26 @@ export function createFileOperations(context: {
       message: item.message,
       target: item.tag == null ? undefined : { kind: item.entityType ?? 'document', number: item.tag },
     }));
-    if (lastImportDiagnostics.some((item) => item.level !== 'info')) {
+    {
+      // Always show what is exported and what is omitted (R19), then the diagnostics.
       const content = createElement('div');
-      content.append(diagnosticDownloads(lastImportDiagnostics));
-      for (const item of lastImportDiagnostics)
-        content.append(createElement('p', `diagnostic-item ${item.level}`, `[${item.code}] ${item.message}`));
+      content.append(renderYamlExportSummary(doc));
+      if (lastImportDiagnostics.some((item) => item.level !== 'info')) {
+        content.append(diagnosticDownloads(lastImportDiagnostics));
+        for (const item of lastImportDiagnostics)
+          content.append(createElement('p', `diagnostic-item ${item.level}`, `[${item.code}] ${item.message}`));
+      }
       if (
         !(await dialogService.confirm({
-          title: localText('YAML出力の影響を確認', 'Review YAML export'),
+          title: localText('YAML出力の内容を確認', 'Review YAML export'),
           body: content,
           confirmLabel: localText('出力', 'Export'),
           cancelLabel: t('dialog.cancel'),
         }))
-      )
+      ) {
+        updateStatus(localText('YAML出力を取り消しました。', 'YAML export cancelled.'));
         return;
+      }
     }
     if (revision !== doc.revision) return;
     const fileName = `${safeFilename(doc.title || currentFileBase, DEFAULT_MODEL_NAME)}.yaml`;
